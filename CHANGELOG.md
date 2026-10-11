@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.23.0 — 2026-10-11
 From a pilot where a one-page tip calculator took 4½ days (3.2 hours of agent work) and 25 tickets:
 - **Small projects.** Choose Small on Home, in New idea or with `--size small`: no idea assessment, at most 8
   acceptance criteria, one reviewer per ticket, one repair attempt before the CTO, and no audits. Standard
