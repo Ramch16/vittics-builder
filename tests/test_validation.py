@@ -114,16 +114,24 @@ def test_interrupted_task_is_resumed(co):
     assert co.pipeline.advance(p['id'])['stage'] == 'release_approval'
 
 
-def test_missing_audit_verdict_blocks_release(co, monkeypatch):
+def test_missing_audit_verdict_is_retried_then_shown_to_the_cto(co, monkeypatch):
     co.s.max_rework = 0
-    original = co.runtime.run
+    original, attempts = co.runtime.run, []
     def run(agent, *args, **kwargs):
         if agent['role'] == 'security_auditor':
+            attempts.append(args[0])
             return RunResult(completed=True, text='No verdict')
         return original(agent, *args, **kwargs)
     monkeypatch.setattr(co.runtime, 'run', run)
-    start_build(co)
-    assert decide_next(co, 'cto')['stage'] == 'release_blocked'
+    p = start_build(co)
+    assert decide_next(co, 'cto')['stage'] == 'release_approval'   # not blocked, and no empty fix ticket
+    assert len(attempts) == 2 and 'ended without a verdict' in attempts[1]
+    [release] = [a for a in co.pipeline.inbox('cto') if a['kind'] == 'release']
+    assert 'Audits without a verdict' in release['summary'] and 'Security Auditor' in release['summary']
+    assert json.loads(release['payload'])['inconclusive']
+    assert not co.db.one("SELECT 1 FROM tasks WHERE project_id=? AND key LIKE 'audit-%'", p['id'])
+    co.pipeline.autopilot.set(p['id'], 'final', 'Niki')
+    assert not co.pipeline.autopilot.step(p['id'])                  # autopilot leaves it to the CTO
 
 
 def test_export_only_signed_off_product(co, tmp_path):

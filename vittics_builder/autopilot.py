@@ -70,6 +70,8 @@ class Autopilot:
                 return True, choice, f"the assessment recommends building it ({choice})"
             return True, "", "the technical assessment finds it achievable"
         if kind == "release":
+            if payload.get("inconclusive"):
+                return False, "", "an audit gave no verdict"
             return True, "", "audits, acceptance checks and executable verification all passed"
         return True, "", "within the approved plan"
 

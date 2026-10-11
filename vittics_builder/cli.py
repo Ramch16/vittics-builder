@@ -90,7 +90,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init", help="Create the company in this folder")
     p = sub.add_parser("new", help="Start a project from a brief")
     p.add_argument("name"); p.add_argument("--brief"); p.add_argument("--brief-file"); p.add_argument("--no-run", action="store_true")
-    p = sub.add_parser("run", help="Continue a project until it needs a decision"); p.add_argument("project", type=int)
+    p.add_argument("--size", choices=["small", "standard"], default="standard", help="small: short spec, one reviewer per ticket, one repair attempt, no audits")
+    p = sub.add_parser("run", help="Continue a project until it needs a decision (resumes a paused one)"); p.add_argument("project", type=int)
+    p = sub.add_parser("pause", help="Pause a project; resume it with run"); p.add_argument("project", type=int)
     p = sub.add_parser('work', help='Run bounded autonomous cycles; preserve human approval gates')
     p.add_argument('project', type=int)
     p.add_argument('--cycles', type=int, default=5)
@@ -165,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("build", help="Idea to production: describe what to build; it is assessed, planned, built and released")
     p.add_argument("brief", help='e.g. "A customer support app with login, a database and Stripe payments"')
     p.add_argument("--name", default="", help="Project name (default: from the brief)")
+    p.add_argument("--size", choices=["small", "standard"], default="standard", help="small: short spec, one reviewer per ticket, one repair attempt, no audits")
     p.add_argument("--autopilot", choices=["off", "key", "final"], default="key",
                    help="off: you approve every step; key (default): you decide the idea, the plan and the final "
                         "sign-off; final: only the final sign-off")
@@ -323,7 +326,7 @@ def _dispatch(args) -> int:
         brief = Path(args.brief_file).read_text(encoding="utf-8") if args.brief_file else args.brief
         if not brief:
             raise PipelineError("Give the brief with --brief or --brief-file.")
-        project = co.pipeline.create_project(args.name, brief, by=co.s.ceo_name)
+        project = co.pipeline.create_project(args.name, brief, by=co.s.ceo_name, size=args.size)
         print(f"Project {project['id']} created: {project['workspace']}")
         if not args.no_run:
             _advance(co, project["id"])
@@ -340,7 +343,12 @@ def _dispatch(args) -> int:
     elif args.cmd == 'routing':
         print(json.dumps(co.router.summary(), indent=2))
     elif args.cmd == "run":
+        if co.pipeline.project(args.project)["stage"] == "paused":
+            co.pipeline.resume(args.project, co.s.human(role))
         _advance(co, args.project)
+    elif args.cmd == "pause":
+        project = co.pipeline.pause(args.project, co.s.human(role))
+        print(f"P{project['id']} {project['name']}: {project['stage_label'] if 'stage_label' in project else project['stage']}.")
     elif args.cmd == "export":
         from .delivery import export_product
         print(export_product(co.pipeline, args.project, Path(args.output)))
@@ -526,7 +534,7 @@ def _dispatch(args) -> int:
     elif args.cmd == "build":
         from .autopilot import LEVELS, name_from
         project = co.pipeline.create_project(args.name or name_from(args.brief), args.brief, by=co.s.human(role),
-                                             idea=True, budget=args.budget)
+                                             idea=args.size != "small", budget=args.budget, size=args.size)
         co.pipeline.autopilot.set(project["id"], args.autopilot, co.s.human(role))
         print(f"P{project['id']} {project['name']}: autopilot {LEVELS[args.autopilot]}. Working...")
         _advance(co, project["id"])

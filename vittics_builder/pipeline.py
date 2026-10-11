@@ -27,7 +27,7 @@ from .org import Org
 from .performance import Performance
 from .tickets import PRIORITY_ORDER, WORK_KINDS, note, ticket_key, where
 from .tools import Workspace
-from .validation import CONTRACT, CONTRACT_GUIDE, evidence, validate_plan, verify_product
+from .validation import CONTRACT, CONTRACT_GUIDE, evidence, same_contract, validate_plan, verify_product
 
 IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
 STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
@@ -36,7 +36,7 @@ STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_app
 STAGE_LABELS = {
     "idea": "Assessing the idea", "idea_review": "Technical sign-off with CTO", "idea_decision": "Decision with CEO",
     "plan": "Planning across departments", "plan_approval": "Plan with CEO and CTO",
-    "parked": "Parked", "dropped": "Dropped", "paused": "Paused: budget used up",
+    "parked": "Parked", "dropped": "Dropped", "paused": "Paused",
     "contract_review": "Acceptance checks changed, with CTO",
     "release_blocked": "Release checks need attention",
     "prd": "Writing requirements", "prd_approval": "Requirements with CEO",
@@ -48,9 +48,14 @@ STAGE_LABELS = {
 }
 HUMAN_APPROVED, HUMAN_REJECTED = 92, 35
 MILESTONES = {"release_approval": "Ready for release review", "release_blocked": "Release blocked",
-              "done": "Signed off", "paused": "Paused for budget", "live": "Live in production",
+              "done": "Signed off", "paused": "Paused", "live": "Live in production",
               "deploy_failed": "Deployment failed"}
 PURPOSES = {"internal": "for internal use", "commercial": "to sell"}
+# small: a short PRD, one reviewer per ticket, one repair attempt and no audits. standard: the full process.
+SIZES = ("small", "standard")
+SMALL_PRD = ("This is a small project: keep docs/PRD.md short, with at most 8 acceptance criteria that cover what "
+             "the brief asks for. Do not add operational, compliance, backup, deployment, retention or capacity "
+             "requirements unless the brief asks for them; list them under exclusions instead.")
 RECOMMENDATIONS = {"build_internal": "build it for internal use", "build_to_sell": "build it to sell",
                    "park": "park it for now", "drop": "drop it"}
 FEASIBILITY = {"achievable": "achievable", "achievable_with_risks": "achievable, with risks",
@@ -81,6 +86,9 @@ class Pipeline:
         self._solo: set[int] = set()            # tickets that hit a merge conflict: redo them alone
         self.swarms = None
         self._cycle_limits = {}
+        self.releasing: set[int] = set()        # projects in their release checks: agents' new tickets wait in backlog
+        self._pause_requested: set[int] = set() # projects to pause at the next safe point
+        self._inconclusive: dict[int, list[str]] = {}   # audits that gave no verdict, shown at the release review
         self.reporter = None                    # writes a pending status report (set by Company)
         self.production = None                  # deploys signed-off releases (set by Company)
         self.machine = None                     # what this computer has and needs (set by Company)
@@ -93,6 +101,13 @@ class Pipeline:
         if not p:
             raise PipelineError(f"No project {pid}.")
         return p
+
+    def small(self, pid: int) -> bool:
+        return self.project(pid).get("size") == "small"
+
+    def max_rework(self, pid: int) -> int:
+        """Times a ticket is sent back before it goes to the CTO: once for a small project."""
+        return min(1, self.s.max_rework) if self.small(pid) else self.s.max_rework
 
     def workspace(self, project: dict) -> Workspace:
         return Workspace(project["workspace"], mode=self.s.sandbox_mode, docker_image=self.s.docker_image,
@@ -149,12 +164,15 @@ class Pipeline:
 
     # ---- projects --------------------------------------------------------
     def create_project(self, name: str, brief: str, by: str = "ceo", idea: bool = False,
-                       budget: float | None = None) -> dict:
-        """A project that starts building, or with `idea` an idea that is assessed and decided first."""
+                       budget: float | None = None, size: str = "standard") -> dict:
+        """A project that starts building, or with `idea` an idea that is assessed and decided first.
+        `size` small runs a lighter process (see SIZES)."""
+        if size not in SIZES:
+            raise PipelineError(f"Size must be one of: {', '.join(SIZES)}.")
         ts = now()
-        pid = self.db.run("INSERT INTO projects (name, brief, stage, author, budget, created_at, updated_at) "
-                          "VALUES (?,?,?,?,?,?,?)", name, brief, "idea" if idea else "prd", by,
-                          self.s.default_budget if budget is None else max(0.0, budget), ts, ts)
+        pid = self.db.run("INSERT INTO projects (name, brief, stage, author, budget, size, created_at, updated_at) "
+                          "VALUES (?,?,?,?,?,?,?,?)", name, brief, "idea" if idea else "prd", by,
+                          self.s.default_budget if budget is None else max(0.0, budget), size, ts, ts)
         slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "project"
         path = self.s.workspaces / f"{pid:03d}-{slug}"
         self.db.run("UPDATE projects SET workspace=? WHERE id=?", str(path), pid)
@@ -277,6 +295,40 @@ class Pipeline:
             self._cycle_limits.pop(pid, None)
             lock.release()
 
+    def running(self, pid: int) -> bool:
+        lock = self._locks.get(pid)
+        return bool(lock and lock.locked())
+
+    def pause(self, pid: int, by: str) -> dict:
+        """Stop a project at the next safe point: now if it is idle, else once the tickets in progress finish."""
+        p = self.project(pid)
+        if p["stage"] in ("done", "live", "dropped", "parked", "paused"):
+            raise PipelineError(f"{p['name']} is {STAGE_LABELS.get(p['stage'], p['stage']).lower()}; there is nothing to pause.")
+        if self.running(pid):
+            self._pause_requested.add(pid)
+            self.db.log("project", f"{by} paused {p['name']}: it stops once the work in progress finishes.", pid, actor=by)
+        else:
+            self._pause_now(pid)
+            self.db.log("project", f"{by} paused {p['name']}.", pid, actor=by)
+        return self.project(pid)
+
+    def _pause_now(self, pid: int) -> None:
+        self._pause_requested.discard(pid)
+        self.db.run("UPDATE projects SET paused_stage=? WHERE id=?", self.project(pid)["stage"], pid)
+        self._stage(pid, "paused")
+
+    def resume(self, pid: int, by: str) -> dict:
+        """Undo a pause. A project paused because its budget ran out needs a larger budget instead."""
+        self._pause_requested.discard(pid)
+        p = self.project(pid)
+        if p["stage"] != "paused":
+            return p
+        if p["budget"] > 0 and spent(self.db, pid) >= p["budget"]:
+            raise PipelineError(f"{p['name']} has used its budget. Raise the budget to resume it.")
+        self._stage(pid, p["paused_stage"] or "build")
+        self.db.log("project", f"{by} resumed {p['name']}.", pid, actor=by)
+        return self.project(pid)
+
     def _cycle_available(self, pid: int, consume: bool = False) -> bool:
         limit = self._cycle_limits.get(pid)
         if not limit:
@@ -297,9 +349,16 @@ class Pipeline:
             self.write_reports(pid)
             while True:
                 while (stage := self.project(pid)["stage"]) in steps:
+                    if pid in self._pause_requested:
+                        self._pause_now(pid)
+                        break
                     if not self._budget_ok(pid) or not self._cycle_available(pid, consume=stage != 'build'):
                         break
                     steps[stage](self.project(pid))
+                if pid in self._pause_requested:           # asked while a gate step was running
+                    self._pause_now(pid)
+                if self.project(pid)["stage"] == "paused":
+                    break
                 stopped = self.project(pid)["stage"] in steps          # budget or cycle limit, not a gate
                 if stopped or not (self.autopilot and self.autopilot.step(pid)):
                     break
@@ -507,6 +566,8 @@ class Pipeline:
         ask = (f"The CEO's brief for a new product, \"{p['name']}\":\n\n{p['brief']}\n\n"
                "Write the requirements document to docs/PRD.md. Include numbered, testable acceptance criteria, "
                "main user journeys, error cases, data persistence, required integrations, and explicit exclusions.")
+        if p.get("size") == "small":
+            ask += "\n\n" + SMALL_PRD
         if p["purpose"]:
             ask += (f"\n\nThis product was assessed and planned, and is being built {PURPOSES[p['purpose']]}. Read "
                     "docs/ASSESSMENT.md and docs/PLAN.md first, and keep the requirements within the planned scope.")
@@ -571,6 +632,9 @@ class Pipeline:
                "Finish by calling submit_plan with the build tasks. Assign each task to one of these roles:\n"
                f"{role_list}\nUse only the roles this product needs. Where the team has them, include tasks for "
                "run/deploy setup, automated tests and user documentation.\n" + CONTRACT_GUIDE)
+        if p.get("size") == "small":
+            ask += ("\n\nThis is a small project: plan as few build tasks as the PRD needs (usually one to three), "
+                    "and keep product.json's checks to installation/build, tests and the main user flow.")
         if p["feedback"]:
             ask += f"\n\nThe CTO sent the previous design back. Address this:\n{p['feedback']}"
         arch_ticket = self._stage_ticket(p["id"], "stage-architecture", f"Architecture and build plan for {p['name']}",
@@ -648,7 +712,7 @@ class Pipeline:
             self._stage(pid, "escalation")      # another failed ticket is still waiting for the CTO
             return
         while True:
-            if not self._budget_ok(pid) or not self._cycle_available(pid, consume=True):
+            if pid in self._pause_requested or not self._budget_ok(pid) or not self._cycle_available(pid, consume=True):
                 return
             self._check_staffing(pid)
             batch = self._claim_batch(pid)
@@ -677,71 +741,90 @@ class Pipeline:
         if p["kind"] == "task":
             self._task_finish(p, ws)
             return
-        release_findings = []
-        # Agents' sandboxes cannot reach Docker, databases, local ports or browsers, so the checks run here first:
-        # real failures go straight back to Engineering, and QA reviews with the real results in hand.
-        # Only the checks the CTO approved are run.
-        if not self._contract_unchanged(p, ws):
-            return
-        self.db.log("work", "Running the product's acceptance checks on this computer.", p["id"])
-        checked = self._host_checks(p, ws)
-        ws.commit("Executable product verification")
-        checked_head = ws.git("rev-parse", "HEAD").strip()
-        if not checked["passed"]:
-            self._release_failure(p, self._check_findings(checked))
-            return
-        qa = self.org.pick(kind="qa")
-        if qa:
-            self.db.log("work", f"{qa['name']} is running the release check.", p["id"], actor=qa["name"])
-            qa_ticket = self._stage_ticket(p["id"], "stage-release-qa", f"Release QA for {p['name']}", qa,
-                                           "Check the whole product against docs/PRD.md and report in docs/QA_REPORT.md.",
-                                           handoff="Engineering (all build tickets done)")
-            integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
-                             "install it, run the full test suite and try the main flows. Write what you ran and "
-                             "what you found to docs/QA_REPORT.md, including anything that does not work. "
-                             "Finish by calling submit_review; request_changes if any required flow fails.\n\n"
-                             + evidence(checked),
-                             ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket})
-            ws.commit(f"Release check ({qa['name']})")
-            if not integration.completed or not integration.review or integration.review["verdict"] != "approve" or not self._read(ws, "docs/QA_REPORT.md"):
-                release_findings.append("Integration QA: " + ((integration.review or {}).get("notes") or "No completed approval verdict."))
-            self._stage_status(p["id"], "stage-release-qa", "done", qa["name"], self._verdict(integration.review)
-                               + ("" if not release_findings else " Repair work goes back to Engineering."), kind="comment")
-        else:
-            release_findings.append("No QA agent is staffed to validate the full product.")
-        if release_findings:
-            self._release_failure(p, release_findings)
-            return
-        open_findings = self._audit(p, ws, checked, checked_head)
-        if open_findings is None:
-            return
-        if open_findings:
-            self._release_failure(p, ["UNRESOLVED AUDIT FINDINGS", *open_findings])
-            return
-        if self._next_task(p["id"]):
-            self.db.log("work", "The team filed new tickets during the release checks; building those first.", p["id"])
-            return
-        if not self._contract_unchanged(p, ws):
-            return
-        changed = [f for f in ws.git("diff", "--name-only", checked_head, "HEAD").splitlines() if f.strip()]
-        if any(not f.startswith("docs/") for f in changed):    # QA or the audits changed the product: check again
+        # While the release checks run, tickets agents file wait in the backlog instead of restarting them.
+        self.releasing.add(pid)
+        release_started = now()
+        try:
+            release_findings = []
+            # Agents' sandboxes cannot reach Docker, databases, local ports or browsers, so the checks run here first:
+            # real failures go straight back to Engineering, and QA reviews with the real results in hand.
+            # Only the checks the CTO approved are run.
+            if not self._contract_unchanged(p, ws):
+                return
+            self.db.log("work", "Running the product's acceptance checks on this computer.", p["id"])
             checked = self._host_checks(p, ws)
             ws.commit("Executable product verification")
-        if not checked["passed"]:
-            self._release_failure(p, self._check_findings(checked))
-            return
-        report = self._read(ws, "docs/QA_REPORT.md") or "No QA report was produced."
-        audits = sorted((ws.root / "docs" / "audits").glob("*.md")) if (ws.root / "docs" / "audits").is_dir() else []
-        report += "\n\nExecutable acceptance checks passed. Evidence: docs/VERIFICATION.json"
-        if audits:
-            report += "\n\nAudit reports: " + ", ".join(f"docs/audits/{a.name}" for a in audits)
-        self._approval(p["id"], "release", "cto", f"Release {p['name']}", report, {"verified_head": ws.git("rev-parse", "HEAD")})
-        self._stage(p["id"], "release_approval")
+            checked_head = ws.git("rev-parse", "HEAD").strip()
+            if not checked["passed"]:
+                self._release_failure(p, self._check_findings(checked))
+                return
+            qa = self.org.pick(kind="qa")
+            if qa:
+                self.db.log("work", f"{qa['name']} is running the release check.", p["id"], actor=qa["name"])
+                qa_ticket = self._stage_ticket(p["id"], "stage-release-qa", f"Release QA for {p['name']}", qa,
+                                               "Check the whole product against docs/PRD.md and report in docs/QA_REPORT.md.",
+                                               handoff="Engineering (all build tickets done)")
+                integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
+                                 "install it, run the full test suite and try the main flows. Write what you ran and "
+                                 "what you found to docs/QA_REPORT.md, including anything that does not work. "
+                                 "Finish by calling submit_review; request_changes if any required flow fails.\n\n"
+                                 + evidence(checked),
+                                 ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket})
+                ws.commit(f"Release check ({qa['name']})")
+                if not integration.completed or not integration.review or integration.review["verdict"] != "approve" or not self._read(ws, "docs/QA_REPORT.md"):
+                    release_findings.append("Integration QA: " + ((integration.review or {}).get("notes") or "No completed approval verdict."))
+                self._stage_status(p["id"], "stage-release-qa", "done", qa["name"], self._verdict(integration.review)
+                                   + ("" if not release_findings else " Repair work goes back to Engineering."), kind="comment")
+            else:
+                release_findings.append("No QA agent is staffed to validate the full product.")
+            if release_findings:
+                self._release_failure(p, release_findings)
+                return
+            open_findings = self._audit(p, ws, checked, checked_head)
+            if open_findings is None:
+                return
+            if open_findings:
+                self._release_failure(p, ["UNRESOLVED AUDIT FINDINGS", *open_findings])
+                return
+            if self._next_task(p["id"]):
+                self.db.log("work", "The team filed new tickets during the release checks; building those first.", p["id"])
+                return
+            if not self._contract_unchanged(p, ws):
+                return
+            changed = [f for f in ws.git("diff", "--name-only", checked_head, "HEAD").splitlines() if f.strip()]
+            if any(not f.startswith("docs/") for f in changed):    # QA or the audits changed the product: check again
+                checked = self._host_checks(p, ws)
+                ws.commit("Executable product verification")
+            if not checked["passed"]:
+                self._release_failure(p, self._check_findings(checked))
+                return
+            report = self._read(ws, "docs/QA_REPORT.md") or "No QA report was produced."
+            audits = sorted((ws.root / "docs" / "audits").glob("*.md")) if (ws.root / "docs" / "audits").is_dir() else []
+            report += "\n\nExecutable acceptance checks passed. Evidence: docs/VERIFICATION.json"
+            if audits:
+                report += "\n\nAudit reports: " + ", ".join(f"docs/audits/{a.name}" for a in audits)
+            later = self.db.all("SELECT id, title FROM tasks WHERE project_id=? AND origin='agent' AND status='backlog' "
+                                "AND created_at>=? ORDER BY id", pid, release_started)
+            if later:
+                report += ("\n\nFiled by the team during the release and waiting in the backlog for you to triage "
+                           "(not built into this release):\n" + "\n".join(f"- {ticket_key(t['id'])} {t['title']}" for t in later))
+            inconclusive = self._inconclusive.pop(pid, [])
+            if inconclusive:
+                report += ("\n\nAudits without a verdict (review their reports yourself before approving):\n"
+                           + "\n".join(f"- {line}" for line in inconclusive))
+            self._approval(p["id"], "release", "cto", f"Release {p['name']}", report,
+                           {"verified_head": ws.git("rev-parse", "HEAD"), "inconclusive": inconclusive})
+            self._stage(p["id"], "release_approval")
+        finally:
+            self.releasing.discard(pid)
 
     def _audit(self, p: dict, ws: Workspace, checked: dict | None = None, checked_head: str | None = None) -> list[str] | None:
         """Run every staffed auditor role over the finished product. Returns None
         if fix tasks were raised (build continues), else the findings still open."""
         pid, findings = p["id"], []
+        self._inconclusive[pid] = []
+        if self.small(pid):
+            return []                            # small projects: release QA and the checks, no audits
         for role in self.org.staffed_roles("auditor"):
             auditor = self.org.pick(role=role["id"])
             self.db.log("work", f"{auditor['name']} is running the {role['title'].lower()} audit.", pid, actor=auditor["name"])
@@ -761,24 +844,33 @@ class Pipeline:
                         "or a concrete suspected regression. State that reason.")
                 else:
                     supplied = "\n\nRuntime inputs changed since the previous host checks; do not treat their results as current."
-            res = self.runtime.run(
-                auditor, f"All build tasks for \"{p['name']}\" are complete. Audit the whole product in the workspace "
-                f"against docs/PRD.md and docs/ARCHITECTURE.md. Write your report to docs/audits/{role['id']}.md, "
-                "then finish by calling submit_review. Use request_changes only for findings that must be fixed "
-                "before release, and list exactly what to fix. Distinguish blockers for the approved current release "
-                "scope from future production or distribution requirements. Never waive an applicable security "
-                "or licence requirement, but do not silently expand the approved scope." + supplied,
-                ws, project_id=pid, meta={"ticket_id": audit_ticket})
-            ws.commit(f"{role['title']} audit ({auditor['name']})")
+            ask = (f"All build tasks for \"{p['name']}\" are complete. Audit the whole product in the workspace "
+                   f"against docs/PRD.md and docs/ARCHITECTURE.md. Write your report to docs/audits/{role['id']}.md, "
+                   "then finish by calling submit_review. Use request_changes only for findings that must be fixed "
+                   "before release, and list exactly what to fix. Distinguish blockers for the approved current release "
+                   "scope from future production or distribution requirements. Never waive an applicable security "
+                   "or licence requirement, but do not silently expand the approved scope." + supplied)
+            for attempt in (1, 2):
+                res = self.runtime.run(auditor, ask, ws, project_id=pid, meta={"ticket_id": audit_ticket})
+                ws.commit(f"{role['title']} audit ({auditor['name']})")
+                if res.completed and res.review and self._read(ws, f"docs/audits/{role['id']}.md"):
+                    break
+                ask += ("\n\nYour previous audit run ended without a verdict. Finish this run with your report and "
+                        "submit_review; do not leave commands running, because you are not resumed afterwards.")
             self._stage_status(pid, f"stage-audit-{role['id']}", "done", auditor["name"], self._verdict(res.review),
                                kind="comment")
-            if not res.completed or not res.review or res.review["verdict"] != "approve" or not self._read(ws, f"docs/audits/{role['id']}.md"):
-                findings.append((role, auditor, (res.review or {}).get("notes") or "Audit did not produce a completed approval verdict."))
+            if not res.completed or not res.review or not self._read(ws, f"docs/audits/{role['id']}.md"):
+                # Twice without a verdict is not a finding: tell the CTO at the release review instead of filing work.
+                self._inconclusive[pid].append(f"{role['title']} ({auditor['name']}) gave no verdict in two attempts.")
+                self.db.log("warn", f"The {role['title'].lower()} audit gave no verdict; the CTO reviews it at release.",
+                            pid, actor=auditor["name"])
+            elif res.review["verdict"] != "approve":
+                findings.append((role, auditor, res.review.get("notes") or "Changes requested without notes."))
         if not findings:
             return []
         rounds = {t["key"].split("-")[1] for t in self.db.all(
             "SELECT key FROM tasks WHERE project_id=? AND key LIKE 'audit-%'", pid)}
-        if len(rounds) >= self.s.max_rework:
+        if len(rounds) >= self.max_rework(pid):
             return [f"{role['title']}: {notes}" for role, _, notes in findings]
         for role, auditor, notes in findings:
             fix = self._fix_task(pid, f"Fix {role['title'].lower()} audit findings",
@@ -800,7 +892,7 @@ class Pipeline:
     def _contract_unchanged(self, p: dict, ws: Workspace) -> bool:
         """Agents may not rewrite the acceptance checks the CTO approved; any change goes back to the CTO."""
         approved, current = self._approved_contract(p["id"]), self._read(ws, CONTRACT) or None
-        if current == approved:
+        if same_contract(current, approved):
             return True
         diff = "\n".join(difflib.unified_diff((approved or "").splitlines(), (current or "").splitlines(),
                                               "approved/product.json", "current/product.json", lineterm=""))
@@ -815,7 +907,7 @@ class Pipeline:
         """Run product.json's checks on this computer (not in an agent's sandbox), with the project's keys."""
         vault = getattr(self.runtime, "vault", None)
         current = ws.resolve(CONTRACT)
-        if not current.is_file() or current.read_text(encoding="utf-8") != self._approved_contract(p["id"]):
+        if not current.is_file() or not same_contract(current.read_text(encoding="utf-8"), self._approved_contract(p["id"])):
             return {"passed": False, "checks": [], "errors": ["Acceptance contract changed or has not been approved; no host commands ran."], "recorded": False}
         return verify_product(ws, vault.env(p["id"]) if vault else None,
                               (lambda text: vault.redact(p["id"], text)) if vault else None,
@@ -835,7 +927,7 @@ class Pipeline:
         if self.machine and (hints := self.machine.explain(feedback)):
             feedback += "\n\nThis computer may be the problem, not the code:\n" + "\n".join(f"- {h}" for h in hints)
             self.db.log("machine", "Release checks failed on a missing command: " + " ".join(hints), pid)
-        if rounds < self.s.max_rework:
+        if rounds < self.max_rework(pid):
             task = p["kind"] == "task"
             self._fix_task(pid, "Make the failing checks pass" if task else "Repair product acceptance failures",
                            feedback + ("" if task else "\n" + CONTRACT_GUIDE), key=f"verify-{rounds + 1}")
@@ -970,14 +1062,16 @@ class Pipeline:
             self._approval(pid, "hire", boss, f"Hire another {role['title']}?", summary,
                            {"role": role["id"], "waiting": row["n"], "staff": len(staff)})
 
-    def _checkers(self) -> list[dict]:
-        """Roles that check each ticket, by review_mode. Fewer checks cost less; release QA and audits always run."""
+    def _checkers(self, pid: int | None = None) -> list[dict]:
+        """Roles that check each ticket, by review_mode (light for a small project). Fewer checks cost less;
+        release QA always runs, and the audits for standard projects."""
         staffed = self.org.staffed_roles("reviewer", "qa")
-        if self.s.review_mode == "thorough":
+        mode = "light" if pid is not None and self.small(pid) else self.s.review_mode
+        if mode == "thorough":
             return staffed
         reviewers = sorted((r for r in staffed if r["kind"] == "reviewer"), key=lambda r: r["id"] != "code_reviewer")
         qa = [r for r in staffed if r["kind"] == "qa"]
-        if self.s.review_mode == "light":
+        if mode == "light":
             return (reviewers or qa)[:1]
         return reviewers[:1] + qa[:1]
 
@@ -1047,7 +1141,7 @@ class Pipeline:
                 note(self.db, task["id"], "Vittics Builder", "Ran the acceptance checks on this computer: "
                      + ", ".join(f"{c['id']} {'passed' if c['passed'] else 'FAILED'}" for c in report["checks"])
                      + ("" if report["checks"] else "none defined") + ".", kind="comment")
-            for check_role in self._checkers():
+            for check_role in self._checkers(pid):
                 checker = self.org.pick(role=check_role["id"], exclude=agent["id"])
                 if not checker:
                     continue
@@ -1100,7 +1194,7 @@ class Pipeline:
                 note(self.db, task["id"], agent["name"], "Passed review. Done.")
                 return True
             attempts = task["attempts"] + 1
-            failed = attempts > self.s.max_rework
+            failed = attempts > self.max_rework(pid)
             self.db.run("UPDATE tasks SET status=?, attempts=?, feedback=?, result=?, updated_at=? WHERE id=?",
                         "failed" if failed else "todo", attempts, "\n".join(findings), res.text, now(), task["id"])
             self.db.log("work", f"[{task['key']}] sent back ({attempts}).", pid, actor=agent["name"])

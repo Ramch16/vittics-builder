@@ -66,6 +66,7 @@ preview:
 # Machine readiness (vittics-builder doctor): installing missing tools always asks first.
 machine:
   installs: true            # false: only report, never install from Vittics Builder
+  keep_awake: true          # keep this computer awake while Vittics Builder runs, so agents' work is not frozen
 # Deploy signed-off releases. Without an entry for a project, it stops at "Ready for deployment".
 # Commands run in the product workspace at the release, with {version}, {previous}, {commit} and
 # {environment} filled in. Only you set these: agents cannot change what runs in production.

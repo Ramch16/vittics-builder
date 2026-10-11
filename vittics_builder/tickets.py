@@ -285,7 +285,10 @@ class Tickets:
             if feedback_id:                      # customer feedback: fix bugs now, prioritise features later
                 status = "todo" if args.get("type") == "bug" else "backlog"
             else:
-                status = "todo" if requested_by else "backlog" if busy or stage in REOPEN_STAGES else "todo"
+                # During the release checks only an urgent bug is built now (it restarts them); the rest waits for triage.
+                releasing = (project_id in getattr(self.pipeline, "releasing", ())
+                             and not (args.get("type") == "bug" and args.get("priority") in ("urgent", "high")))
+                status = "todo" if requested_by else "backlog" if busy or releasing or stage in REOPEN_STAGES else "todo"
             t = self.create(project_id, str(args["title"])[:200], str(args.get("description", ""))[:4000],
                             agent["name"], type=args.get("type", "task"), priority=args.get("priority", "medium"),
                             status=status, role=args.get("role"), origin="agent")

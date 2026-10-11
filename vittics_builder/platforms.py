@@ -75,3 +75,24 @@ def safe_argv(argv: list[str]) -> list[str]:
         raise UnsafeCommand(f"{Path(exe).name} is a Windows batch wrapper and its arguments contain characters cmd.exe "
                             "would treat as commands. Install the CLI's native .exe, or run it from WSL.")
     return [exe, *argv[1:]]
+
+
+def keep_awake(enabled: bool = True) -> str:
+    """Stop this computer from sleeping while this process runs, so agents' work is not frozen overnight.
+    Returns how ('caffeinate', 'SetThreadExecutionState') or '' when it is off or unsupported."""
+    if not enabled:
+        return ""
+    import subprocess
+    import sys
+    if sys.platform == "darwin" and shutil.which("caffeinate"):
+        # -i idle sleep, -m disk sleep, -s system sleep on power; -w ends it when this process exits
+        subprocess.Popen(["caffeinate", "-ims", "-w", str(os.getpid())], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return "caffeinate"
+    if os.name == "nt":
+        import ctypes
+        es_continuous, es_system_required = 0x80000000, 0x00000001    # kept until this thread exits
+        if ctypes.windll.kernel32.SetThreadExecutionState(es_continuous | es_system_required):
+            return "SetThreadExecutionState"
+    return ""
+
