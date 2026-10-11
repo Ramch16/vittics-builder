@@ -95,11 +95,24 @@ class Previews:
         ws = self.co.pipeline.workspace(project)
         tag = f"v{version}"
         copy = self.folder / f"{pid}-{tag}"
-        if copy.exists():
-            shutil.rmtree(copy, ignore_errors=True)
-            ws.git("worktree", "prune")
+        old = self.current(pid)
+        if old and old["status"] == "running" and old["version"] == version:
+            return True, f"Already running at {old['url']}"
         self.folder.mkdir(parents=True, exist_ok=True)
-        ws.git("worktree", "add", "--detach", "-q", str(copy), tag)
+        if copy.exists():
+            # Local configuration and data belong to this release. Recreating
+            # its worktree rotates secrets while external databases survive.
+            expected = ws.git("rev-parse", tag)
+            try:
+                actual = ws.git("-C", str(copy), "rev-parse", "HEAD")
+                changed = ws.git("-C", str(copy), "status", "--porcelain", "--untracked-files=no")
+            except Exception:
+                return False, "Existing preview checkout is invalid; preserved for recovery."
+            if actual != expected or changed:
+                return False, "Existing preview source differs from its release; preserved for recovery."
+        else:
+            ws.git("worktree", "prune")
+            ws.git("worktree", "add", "--detach", "-q", str(copy), tag)
         self.logs.mkdir(parents=True, exist_ok=True)
         log_path = self.logs / f"{pid}-{tag}.log"
         port = free_port()
@@ -141,7 +154,7 @@ class Previews:
         old = self.current(pid)
         if old and old["status"] == "running":
             self._kill(old["pid"])
-            self._remove(project, old["path"])
+            # Keep the old release configuration/data for a later restart.
         self.db.run("INSERT INTO previews(project_id, version, port, pid, url, path, log, status, started_at) "
                     "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET version=excluded.version, "
                     "port=excluded.port, pid=excluded.pid, url=excluded.url, path=excluded.path, log=excluded.log, "
@@ -166,8 +179,7 @@ class Previews:
     def _fail(self, pid: int, copy: Path, log_path: Path, why: str) -> str:
         tail = self.co.vault.redact(pid, log_path.read_text(encoding="utf-8", errors="replace")[-3000:]) \
             if log_path.exists() else ""
-        project = self.co.pipeline.project(pid)
-        self._remove(project, str(copy))
+        # Keep generated configuration on failure so retries use the same keys.
         return f"The preview did not start: {why}.\n\n{tail}".strip()
 
     def _remove(self, project: dict, path: str) -> None:

@@ -234,3 +234,29 @@ def test_key_values_never_come_back_from_the_dashboard(co):
     assert "STRIPE_SECRET_KEY" in everything and "sk_test_abc123" not in everything
     assert client.post(f"/api/projects/{p['id']}/keys/STRIPE_SECRET_KEY/delete", headers=cto).json() == []
     assert client.post(f"/api/projects/{p['id']}/preview", json={"action": "start"}, headers=cto).status_code == 400
+
+
+def test_preview_restart_preserves_private_configuration_and_data(previews):
+    co = previews
+    p = released(co, {"command": SERVE, "health": "/index.html"})
+    assert co.previews.start(p, 1)[0]
+    first = co.previews.current(p['id'])
+    root = Path(first['path'])
+    (root / '.env').write_text('DATABASE_PASSWORD=original-test-value')
+    (root / 'local-data.txt').write_text('keep existing data')
+    assert co.previews.start(p, 1)[0]
+    assert co.previews.current(p['id'])['pid'] == first['pid']
+    co.previews.stop(p['id'])
+    assert co.previews.start(p, 1)[0]
+    assert (root / '.env').read_text() == 'DATABASE_PASSWORD=original-test-value'
+    assert (root / 'local-data.txt').read_text() == 'keep existing data'
+
+
+def test_failed_preview_setup_keeps_generated_configuration(previews):
+    co = previews
+    setup = f'''{PY} -c "from pathlib import Path; p=Path('.env'); existed=p.exists(); p.write_text('original') if not existed else None; raise SystemExit(0 if existed else 3)"'''
+    p = released(co, {"setup": setup, "command": SERVE, "health": "/index.html"})
+    assert not co.previews.start(p, 1)[0]
+    root = co.previews.folder / f"{p['id']}-v1"
+    assert (root / '.env').read_text() == 'original'
+    assert co.previews.start(p, 1)[0]

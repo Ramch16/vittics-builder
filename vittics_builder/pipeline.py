@@ -523,7 +523,13 @@ class Pipeline:
         authors = [pm["id"]]
         for role in self.org.staffed_roles("designer"):
             designer = self.org.pick(role=role["id"])
-            ask = (f"Project \"{p['name']}\". Read docs/PRD.md, then write the design to docs/DESIGN.md.")
+            ask = (f"Project \"{p['name']}\". Read docs/PRD.md, then write the design to docs/DESIGN.md. "
+                   "For a graphical product, also create docs/design/prototype.html: a self-contained visual "
+                   "prototype of the main screens, with no external scripts or services. Show desktop/mobile "
+                   "layout, typography, spacing, navigation, and loading, empty, error and success states. "
+                   "Explain visual choices and how builders will match the approved prototype. "
+                   "For a non-graphical product, explain why a visual prototype is not applicable. "
+                   "This is an early design artifact for the existing CEO requirements approval, not a claim of working functionality.")
             if p["feedback"]:
                 ask += f"\n\nThe CEO sent the previous version back. Address this where it concerns the design:\n{p['feedback']}"
             self.db.log("work", f"{designer['name']} is designing the user experience.", p["id"], actor=designer["name"])
@@ -541,6 +547,8 @@ class Pipeline:
         summary = self._read(ws, "docs/PRD.md")
         if design := self._read(ws, "docs/DESIGN.md"):
             summary += f"\n\n----- docs/DESIGN.md -----\n{design}"
+        if ws.resolve("docs/design/prototype.html").is_file():
+            summary += "\n\nVisual prototype: docs/design/prototype.html. Review the screens before approving implementation."
         self._approval(p["id"], "prd", "ceo", f"Requirements for {p['name']}", summary,
                        {"agent_ids": authors, "file": "docs/PRD.md"})
         self._stage(p["id"], "prd_approval", "")
@@ -704,7 +712,7 @@ class Pipeline:
         if release_findings:
             self._release_failure(p, release_findings)
             return
-        open_findings = self._audit(p, ws)
+        open_findings = self._audit(p, ws, checked, checked_head)
         if open_findings is None:
             return
         if open_findings:
@@ -730,7 +738,7 @@ class Pipeline:
         self._approval(p["id"], "release", "cto", f"Release {p['name']}", report, {"verified_head": ws.git("rev-parse", "HEAD")})
         self._stage(p["id"], "release_approval")
 
-    def _audit(self, p: dict, ws: Workspace) -> list[str] | None:
+    def _audit(self, p: dict, ws: Workspace, checked: dict | None = None, checked_head: str | None = None) -> list[str] | None:
         """Run every staffed auditor role over the finished product. Returns None
         if fix tasks were raised (build continues), else the findings still open."""
         pid, findings = p["id"], []
@@ -740,11 +748,27 @@ class Pipeline:
             audit_ticket = self._stage_ticket(pid, f"stage-audit-{role['id']}", f"{role['title']} audit for {p['name']}",
                                               auditor, f"Audit the product and report in docs/audits/{role['id']}.md.",
                                               handoff="Quality (release QA passed)")
+            supplied = ""
+            if checked is not None and checked_head:
+                changed = ws.git("diff", "--name-only", checked_head).splitlines()
+                changed += ws.git("ls-files", "--others", "--exclude-standard").splitlines()
+                report_only = lambda name: name == "docs/QA_REPORT.md" or (name.startswith("docs/audits/") and name.endswith(".md"))
+                if all(report_only(name) for name in changed):
+                    supplied = ("\n\nAuthorized host results for candidate " + checked_head + ":\n" + evidence(checked)
+                        + "\nOnly review-report files may have changed since these results. Reuse this evidence; "
+                        "do not repeat the full suite solely because your sandbox cannot execute it. "
+                        "Request a focused approved check only for a changed runtime input, an uncovered requirement, "
+                        "or a concrete suspected regression. State that reason.")
+                else:
+                    supplied = "\n\nRuntime inputs changed since the previous host checks; do not treat their results as current."
             res = self.runtime.run(
                 auditor, f"All build tasks for \"{p['name']}\" are complete. Audit the whole product in the workspace "
                 f"against docs/PRD.md and docs/ARCHITECTURE.md. Write your report to docs/audits/{role['id']}.md, "
                 "then finish by calling submit_review. Use request_changes only for findings that must be fixed "
-                "before release, and list exactly what to fix.", ws, project_id=pid, meta={"ticket_id": audit_ticket})
+                "before release, and list exactly what to fix. Distinguish blockers for the approved current release "
+                "scope from future production or distribution requirements. Never waive an applicable security "
+                "or licence requirement, but do not silently expand the approved scope." + supplied,
+                ws, project_id=pid, meta={"ticket_id": audit_ticket})
             ws.commit(f"{role['title']} audit ({auditor['name']})")
             self._stage_status(pid, f"stage-audit-{role['id']}", "done", auditor["name"], self._verdict(res.review),
                                kind="comment")

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- Give release auditors candidate-checked host evidence and explicit release-scope guidance to avoid unnecessary full-suite reruns.
+- Request self-contained graphical prototypes during requirements design and reference them in approval summaries.
+- Preserve release preview configuration and local data across restarts and failed setup; repeated Start is idempotent.
+
+
 ## 0.22.0
 - Builders and QA can request selected CTO-approved acceptance checks through Vittics while working, then consume the actual output before submission. Coding CLI sandbox permissions stay unchanged.
 - Bound check/repair continuations, retain check output in run history, show valid staffed ticket roles, and preserve failure tails in long approval summaries.
