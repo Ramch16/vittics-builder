@@ -216,6 +216,8 @@
   .live { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: .35rem; animation: pulse 1.6s infinite; }
   #error { position: fixed; right: 1rem; bottom: 1rem; max-width: min(420px, calc(100vw - 2rem)); min-height: 0; background: var(--bad); color: var(--panel); padding: .7rem 1rem; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .22); z-index: 50; }
   #error:empty { display: none; }
+  #notice { position: fixed; right: 1rem; bottom: 4.2rem; max-width: min(420px, calc(100vw - 2rem)); background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: .6rem 1rem; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); z-index: 50; }
+  #notice:empty { display: none; }
   #signin { margin-top: 14vh; }
   @media (max-width: 900px) {
     .shell { grid-template-columns: minmax(0, 1fr); }
@@ -265,6 +267,11 @@
           <h2 style="margin:0 0 .5rem">What do you want to build?</h2>
           <textarea id="build-brief" rows="2" placeholder="e.g. A customer support app with login, a database and Stripe payments"></textarea>
           <div class="row" style="margin-top:.5rem;gap:.6rem;flex-wrap:wrap;align-items:center">
+            <label class="row" style="gap:.4rem;align-items:center">Size
+              <select id="build-size" style="width:auto">
+                <option value="small">Small: short spec, one reviewer, no audits</option>
+                <option value="standard" selected>Standard: the full process</option>
+              </select></label>
             <label class="row" style="gap:.4rem;align-items:center">How hands-on?
               <select id="build-level" style="width:auto">
                 <option value="key" selected>Key decisions: the idea, the plan and the final sign-off</option>
@@ -395,6 +402,7 @@
     </div>
   </div>
   <div id="error" role="alert"></div>
+  <div id="notice" role="status"></div>
 </div>
 
 <dialog id="action-dlg" aria-labelledby="action-title"><form id="action-form">
@@ -420,6 +428,7 @@
   <label class="muted row" style="flex-wrap:nowrap;align-items:flex-start;margin:.4rem 0"><input type="checkbox" id="p-idea" checked style="width:auto;margin-top:.25rem">
     <span>Assess it first: Ram checks feasibility, internal use versus selling, and revenue with Engineering, Marketing and Legal. Lucky signs off, then Niki decides.</span></label>
   <label class="field"><span>Budget in US dollars (blank: the company default)</span><input id="p-budget" type="number" min="0" step="1" placeholder="default"></label>
+  <label class="field"><span>Size</span><select id="p-size"><option value="standard" selected>Standard: the full process</option><option value="small">Small: short spec, one reviewer, no audits</option></select></label>
   <div class="row" style="margin-top:.6rem"><button class="primary" id="p-start">Submit idea</button><button data-close="idea-dlg">Cancel</button></div>
 </dialog>
 
@@ -549,6 +558,13 @@ async function api(path, body) {
 function signOut(message) {
   token = ""; sessionStorage.removeItem("vittics-token");
   $("app").hidden = true; $("signin").hidden = false; $("signin-error").textContent = message || "";
+}
+
+let noticeTimer = null;
+function notice(message) {
+  $("notice").textContent = message || "";
+  clearTimeout(noticeTimer);
+  if (message) noticeTimer = setTimeout(() => { $("notice").textContent = ""; }, 6000);
 }
 
 async function act(fn) {
@@ -739,7 +755,7 @@ function ago(ts) {
 function tone(stage) { return ["done", "live"].includes(stage) ? "done" : TROUBLE.includes(stage) ? "fired" : WAITING.includes(stage) ? "probation" : stage === "dropped" || stage === "parked" ? "cancelled" : "in_review"; }
 function stageChip(p) { return `<span class="chip ${tone(p.stage)}">${esc(p.stage_label)}</span>`; }
 function chips(p) {
-  return (p.kind === "task" ? ` <span class="chip in_review">Task</span>` : "") + (p.version ? ` <span class="chip done">v${p.version}</span>` : "")
+  return (p.kind === "task" ? ` <span class="chip in_review">Task</span>` : "") + (p.size === "small" ? ` <span class="chip in_review">Small</span>` : "") + (p.version ? ` <span class="chip done">v${p.version}</span>` : "")
     + (p.purpose ? ` <span class="chip ${p.purpose === "commercial" ? "active" : "in_review"}">${p.purpose === "commercial" ? "To sell" : "Internal"}</span>` : "");
 }
 function steps(p) {
@@ -917,7 +933,8 @@ function renderProject() {
         ${built(p) && p.kind !== "task" ? `<button data-feedback="${p.id}">Customer feedback</button>` : ""}
         ${pm ? `<button data-chat="${pm.id}">Message ${esc(pm.name)}</button>` : ""}
         ${p.stage === "parked" && me === "ceo" ? `<button data-revisit="${p.id}">Revisit this idea</button>` : ""}
-        ${["done", "live", "dropped", "paused", "parked"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">Resume work</button>`}
+        ${["done", "live", "dropped", "parked"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">${p.stage === "paused" ? "Resume" : "Resume work"}</button>`}
+        ${["done", "live", "dropped", "parked", "paused"].includes(p.stage) ? "" : `<button class="quiet" data-pause="${p.id}" title="Stop this project; work in progress finishes first">Pause</button>`}
       </div></div>
     <div class="stepper">${s.list.map((st, i) => `<div class="step ${s.done || i < s.at ? "past" : i === s.at ? "now" : ""}"><i></i>${esc(st.label)}</div>`).join("")}</div>
     <div class="cols">
@@ -1334,7 +1351,8 @@ document.addEventListener("click", e => {
   else if (d.boardReview) act(async()=>{await api(`/api/projects/${d.boardReview}/board`,{});location.hash='#/operations';await loadOperations();});
   else if (d.securityScan) act(async()=>{const report=await api(`/api/projects/${d.securityScan}/security-scan`,{});$("ops-detail-body").textContent=JSON.stringify(report,null,2);$("ops-detail").showModal();});
   else if (d.work) act(() => api(`/api/projects/${d.work}/work?cycles=5&seconds=300`, {}));
-  else if (d.run) act(() => api(`/api/projects/${d.run}/run`, {}));
+  else if (d.run) act(async () => notice((await api(`/api/projects/${d.run}/run`, {})).message));
+  else if (d.pause) act(async () => notice((await api(`/api/projects/${d.pause}/pause`, {})).message));
   else if (d.rehire) act(() => api(`/api/agents/${d.rehire}/rehire`, {}));
   else if (d.fire) {
     act(async () => {
@@ -1346,7 +1364,7 @@ document.addEventListener("click", e => {
 $("p-idea").onchange = () => { $("p-start").textContent = $("p-idea").checked ? "Submit idea" : "Start building"; };
 $("p-start").onclick = () => act(async () => {
   const budget = $("p-budget").value === "" ? null : Number($("p-budget").value);
-  const created = await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value, idea: $("p-idea").checked, budget });
+  const created = await api("/api/projects", { name: $("p-name").value, brief: $("p-brief").value, idea: $("p-idea").checked, budget, size: $("p-size").value });
   $("p-budget").value = ""; $("p-name").value = ""; $("p-brief").value = "";
   $("idea-dlg").close();
   location.hash = "#/project/" + created.id;
@@ -1384,7 +1402,7 @@ $("build-form").onsubmit = e => {
   const brief = $("build-brief").value.trim();
   if (!brief) { $("error").textContent = "Describe what you want to build."; return; }
   act(async () => {
-    const p = await api("/api/build", { brief, autopilot: $("build-level").value });
+    const p = await api("/api/build", { brief, autopilot: $("build-level").value, size: $("build-size").value });
     $("build-brief").value = "";
     location.hash = `#/project/${p.id}`;
   });

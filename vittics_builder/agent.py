@@ -339,12 +339,12 @@ class AgentRuntime:
                 raise ToolError("Request a nonempty list of approved check IDs.")
             if not ws or not project_id:
                 raise ToolError("Approved checks require a project workspace.")
-            from .validation import CONTRACT, verify_product, evidence
+            from .validation import CONTRACT, verify_product, evidence, same_contract
             row = self.db.one("SELECT payload FROM approvals WHERE project_id=? AND status='approved' "
                               "AND kind IN ('architecture', 'contract') ORDER BY id DESC LIMIT 1", project_id)
             approved = json.loads(row["payload"]).get("contract") if row else None
             current = ws.resolve(CONTRACT)
-            if not approved or not current.is_file() or current.read_text(encoding="utf-8") != approved:
+            if not approved or not current.is_file() or not same_contract(current.read_text(encoding="utf-8"), approved):
                 raise ToolError("product.json must match the CTO-approved contract before host execution.")
             if meta.get("host_check_requests", 0) >= 2:
                 raise ToolError("Check/repair continuation limit reached; report the unresolved check and owner.")

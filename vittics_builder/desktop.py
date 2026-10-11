@@ -94,6 +94,8 @@ def main(home: str | None = None, port: int | None = None) -> None:
     root = Path(home or os.environ.get("VITTICS_HOME") or desktop_home()).expanduser()
     migrate_company(root)
     co = Company(root, create=not (root / ".vittics" / "company.db").exists())
+    from .platforms import keep_awake
+    keep_awake(bool((co.s.raw.get("machine") or {}).get("keep_awake", True)))
     tokens = desktop_tokens(root)
     port = port or free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(co, tokens, desktop=True), host="127.0.0.1", port=port,

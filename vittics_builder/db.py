@@ -381,7 +381,8 @@ class DB:
                              ("paused_stage", "TEXT NOT NULL DEFAULT ''"), ("version", "INTEGER NOT NULL DEFAULT 0"),
                              ("kind", "TEXT NOT NULL DEFAULT 'product'"), ("source", "TEXT NOT NULL DEFAULT ''"),
                              ("base_branch", "TEXT NOT NULL DEFAULT ''"), ("branch", "TEXT NOT NULL DEFAULT ''"),
-                             ("checks", "TEXT NOT NULL DEFAULT '[]'"), ("autopilot", "TEXT NOT NULL DEFAULT 'off'")):
+                             ("checks", "TEXT NOT NULL DEFAULT '[]'"), ("autopilot", "TEXT NOT NULL DEFAULT 'off'"),
+                             ("size", "TEXT NOT NULL DEFAULT 'standard'")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
                 self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.

@@ -36,6 +36,7 @@ class NewProject(BaseModel):
     brief: str
     idea: bool = False
     budget: float | None = None
+    size: str = "standard"
 
 
 class Build(BaseModel):
@@ -43,6 +44,7 @@ class Build(BaseModel):
     name: str = ""
     autopilot: str = "key"
     budget: float | None = None
+    size: str = "standard"
 
 
 class Budget(BaseModel):
@@ -474,7 +476,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         if not body.name.strip() or not body.brief.strip():
             raise HTTPException(400, "A project needs a name and a brief.")
         project = guard(lambda: co.pipeline.create_project(body.name.strip(), body.brief.strip(), by=co.s.human(role),
-                                                           idea=body.idea, budget=body.budget))
+                                                           idea=body.idea, budget=body.budget, size=body.size))
         run_in_background(project["id"])
         return project
 
@@ -488,8 +490,10 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         if body.autopilot not in LEVELS:
             raise HTTPException(400, f"Autopilot is one of: {', '.join(LEVELS)}.")
         who = co.s.human(role)
+        # A small project skips the idea assessment: asking for it to be built is the decision.
         project = guard(lambda: co.pipeline.create_project(body.name.strip() or name_from(brief), brief, by=who,
-                                                           idea=True, budget=body.budget))
+                                                           idea=body.size != "small", budget=body.budget,
+                                                           size=body.size))
         co.pipeline.autopilot.set(project["id"], body.autopilot, who)
         run_in_background(project["id"])
         return co.pipeline.project(project["id"])
@@ -530,9 +534,27 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
 
     @app.post("/api/projects/{pid}/run")
     def run_project(pid: int, role: str = Depends(auth)) -> dict:
+        """Resume work, and say what happened: the button used to give no sign either way."""
+        from .pipeline import STAGE_LABELS
         project = guard(lambda: co.pipeline.project(pid))
+        if co.pipeline.running(pid):
+            return {**project, "message": "Already working on it."}
+        if project["stage"] == "paused":
+            project = guard(lambda: co.pipeline.resume(pid, co.s.human(role)))
+        waiting = co.db.one("SELECT title, required_role FROM approvals WHERE project_id=? AND status='pending' "
+                            "ORDER BY id LIMIT 1", pid)
+        if project["stage"] in ("done", "live", "dropped", "parked"):
+            return {**project, "message": f"Nothing to do: {STAGE_LABELS.get(project['stage'], project['stage'])}."}
         run_in_background(pid)
-        return project
+        if waiting:
+            return {**project, "message": f"Waiting for the {waiting['required_role'].upper()}: {waiting['title']}."}
+        return {**project, "message": "Started."}
+
+    @app.post("/api/projects/{pid}/pause")
+    def pause_project(pid: int, role: str = Depends(auth)) -> dict:
+        project = guard(lambda: co.pipeline.pause(pid, co.s.human(role)))
+        return {**project, "message": "Paused." if project["stage"] == "paused" else
+                "Pausing once the work in progress finishes."}
 
     @app.post("/api/tasks")
     def new_task(body: NewTask, role: str = Depends(auth)) -> dict:
@@ -741,6 +763,9 @@ def serve(co: Company, host: str, port: int, open_app: bool = False) -> None:
     print(f"{co.s.company} dashboard: http://{host}:{port}")
     if open_app:
         open_window(f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}/#/home")
+    from .platforms import keep_awake
+    if keep_awake(bool((co.s.raw.get("machine") or {}).get("keep_awake", True))):
+        print("Keeping this computer awake while the dashboard runs (machine.keep_awake in org.yaml).")
     uvicorn.run(create_app(co, tokens), host=host, port=port, log_level="warning")
 
 

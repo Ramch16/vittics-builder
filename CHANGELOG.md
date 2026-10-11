@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.23.0 — 2026-10-11
+From a pilot where a one-page tip calculator took 4½ days (3.2 hours of agent work) and 25 tickets:
+- **Small projects.** Choose Small on Home, in New idea or with `--size small`: no idea assessment, at most 8
+  acceptance criteria, one reviewer per ticket, one repair attempt before the CTO, and no audits. Standard
+  (the default) is unchanged.
+- **Release checks no longer restart over small tickets.** While they run, agents' new tickets wait in the
+  backlog unless they are urgent or high-priority bugs, and the release review lists them.
+- **Audits without a verdict** are retried once, then listed at the release review for the CTO instead of
+  becoming fix tickets with no findings. Autopilot does not approve a release past them.
+- **Agents run commands in the foreground.** Claude Code's background tasks are off for agents
+  (`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS`): an agent that started a long job in the background ended its run
+  waiting for a result it could never receive.
+- **Description text in product.json** (setup, run, release notes) can change without a new CTO approval;
+  only its name, checks and serve command are compared.
+- **Pause and Resume** each project from its page or with `vittics-builder pause`. **Resume work** now says
+  what happened.
+- **The computer stays awake** while Vittics Builder runs (`machine.keep_awake`, on by default): on macOS
+  with `caffeinate`, on Windows with SetThreadExecutionState.
+
 ## 0.22.0
 - Builders and QA can request selected CTO-approved acceptance checks through Vittics while working, then consume the actual output before submission. Coding CLI sandbox permissions stay unchanged.
 - Bound check/repair continuations, retain check output in run history, show valid staffed ticket roles, and preserve failure tails in long approval summaries.
