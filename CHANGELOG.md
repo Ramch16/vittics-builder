@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.24.0 — 2026-10-11
+- Give release auditors candidate-checked host evidence and explicit release-scope guidance to avoid unnecessary full-suite reruns.
+- Request self-contained graphical prototypes during requirements design and reference them in approval summaries.
+- Preserve release preview configuration and local data across restarts and failed setup; repeated Start is idempotent.
+
 ## 0.23.0 — 2026-10-11
 From a pilot where a one-page tip calculator took 4½ days (3.2 hours of agent work) and 25 tickets:
 - **Small projects.** Choose Small on Home, in New idea or with `--size small`: no idea assessment, at most 8

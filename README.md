@@ -871,3 +871,20 @@ Each role gets only the tools listed for it.
 
 MIT. Use it, change it and build on it, commercially too; keep the copyright notice. See `LICENSE`,
 and `NOTICE.md` for third-party packages. Contributions are welcome: see `CONTRIBUTING.md`.
+
+
+### Review evidence and visual design
+
+Release auditors receive the host acceptance results when only QA/audit Markdown reports
+have changed since the checked candidate. Other changes invalidate that handoff; this does
+not cache checks or waive review. Auditors should explain a concrete reason for requesting
+another full run and assess the approved release scope separately from future deployments.
+
+For graphical products, designers are asked to create `docs/design/prototype.html` with
+representative screens and interaction states before the existing requirements approval.
+When present, the approval summary points to it. This is a design deliverable, not an
+automated guarantee of visual quality; review it before approving implementation.
+
+Stopped and failed previews retain their release worktree and generated local configuration.
+Restarting reuses it only if tracked source still matches the release tag. Modified source is
+preserved and reported for recovery, rather than deleted. Already-running previews are reused.

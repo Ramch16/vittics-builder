@@ -208,7 +208,10 @@ roles:
       docs/DESIGN.md: the user flows step by step, every screen or command
       with its elements and states (empty, loading, error, success), the
       wording of labels and messages, and accessibility requirements. Use
-      text wireframes. For products with no interface, describe the developer
+      text wireframes and, for graphical products, a self-contained visual
+      prototype at docs/design/prototype.html for the requirements approval.
+      Show typography, spacing, responsive layouts and interaction states.
+      For products with no interface, describe the developer
       experience instead: commands, API shapes, error messages.
 
   # ---- Engineering ----

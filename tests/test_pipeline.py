@@ -116,3 +116,21 @@ def test_review_mode_sets_who_checks_each_ticket(co, mode, expected):
     decide_next(co, "cto")
     core = next(t for t in co.pipeline.overview()[0]["tasks"] if t["key"] == "core")
     assert {r["reviewer"] for r in co.db.all("SELECT reviewer FROM reviews WHERE task_id=?", core["id"])} == expected
+
+
+def test_design_requests_visual_prototype_and_surfaces_it_for_approval(co, monkeypatch):
+    p = co.pipeline.create_project('Dashboard', 'A graphical dashboard')
+    ws = co.pipeline.workspace(p)
+    original = co.runtime.run
+    prompts = []
+    def run(agent, prompt, *args, **kwargs):
+        prompts.append(prompt)
+        result = original(agent, prompt, *args, **kwargs)
+        if 'self-contained visual' in prompt:
+            ws.write_file('docs/design/prototype.html', '<!doctype html><title>Prototype</title>')
+        return result
+    monkeypatch.setattr(co.runtime, 'run', run)
+    co.pipeline._prd(p)
+    approval = co.db.one("SELECT summary FROM approvals WHERE project_id=? AND kind='prd'", p['id'])
+    assert 'Visual prototype: docs/design/prototype.html' in approval['summary']
+    assert any('desktop/mobile' in prompt and 'error and success' in prompt for prompt in prompts)

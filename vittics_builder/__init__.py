@@ -1,3 +1,3 @@
 """Vittics Builder: an AI-staffed software company led by a human CEO and CTO."""
 
-__version__ = "0.23.0"
+__version__ = "0.24.0"

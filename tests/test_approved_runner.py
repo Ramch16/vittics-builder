@@ -121,3 +121,27 @@ def test_api_check_requests_are_also_bounded(co):
         co.runtime._execute(co.org.agent('Hari'), 'run_approved_checks', {'ids': ['flow']}, ws, RunResult(), p['id'], meta, 0)
     with pytest.raises(ToolError, match='continuation limit'):
         co.runtime._execute(co.org.agent('Hari'), 'run_approved_checks', {'ids': ['flow']}, ws, RunResult(), p['id'], meta, 0)
+
+
+@pytest.mark.parametrize('change,current', [('docs/audits/notes.md', True), ('app.py', False), ('docs/helper.py', False)])
+def test_auditors_receive_only_current_host_evidence(co, monkeypatch, change, current):
+    p, ws = approved(co)
+    ws.commit('Approved candidate')
+    head = ws.git('rev-parse', 'HEAD')
+    ws.write_file(change, 'new content')
+    prompts = []
+    original = co.runtime.run
+    def capture(agent, prompt, *args, **kwargs):
+        prompts.append(prompt)
+        return original(agent, prompt, *args, **kwargs)
+    monkeypatch.setattr(co.runtime, 'run', capture)
+    report = {'passed': True, 'errors': [], 'recorded': True,
+              'checks': [{'id': 'flow', 'passed': True, 'command': 'python test.py', 'output': 'exit code 0'}]}
+    co.pipeline._audit(p, ws, report, head)
+    assert prompts
+    assert ('flow: PASSED' in prompts[0]) is current
+    assert 'approved current release' in prompts[0]
+    if current:
+        assert 'do not repeat the full suite' in prompts[0]
+    else:
+        assert 'do not treat their results as current' in prompts[0]
