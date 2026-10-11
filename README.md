@@ -442,6 +442,26 @@ vittics-builder build "A customer support app with login, a database and Stripe 
 | `key`, key decisions (default) | the idea, the plan, the final sign-off | technical sign-off, requirements, design, the release review |
 | `final`, final sign-off only | the final sign-off | also the idea (when the assessment recommends building) and the plan |
 
+**Size.** Choose **Small** for something like a calculator, a form or a single page (`--size small`): it
+skips the idea assessment, keeps the requirements to at most 8 acceptance criteria, has one reviewer per
+ticket, sends a ticket to the CTO after one repair attempt instead of two, and has no audits (release QA and
+the acceptance checks still run). **Standard** (the default) is the full process, for products with real
+users and data.
+
+```bash
+vittics-builder build "A tip calculator page that splits a bill" --size small --autopilot final
+```
+
+- **The release checks don't restart over small things.** While they run, tickets the team files wait in the
+  backlog (only an urgent or high-priority bug is built first), and the release review lists them for you.
+  An audit that ends without a verdict is retried once, then shown to the CTO at the release review instead
+  of becoming a fix ticket; autopilot never approves past it.
+- **Pause and Resume** a project from its page (`vittics-builder pause 3`, `vittics-builder run 3`). A pause
+  takes effect once the tickets in progress finish, so no work is lost. **Resume work** says what happened:
+  started, already working, or which decision it is waiting for.
+- **The computer stays awake** while Vittics Builder runs (`machine.keep_awake` in org.yaml), so overnight
+  work is not frozen.
+
 - **Some things always wait for you:** the final sign-off, any failure (blocked release,
   escalated ticket, failed deployment), changed acceptance checks, budgets, hiring and installs. A
   release review is only created once audits, acceptance checks and executable verification pass.

@@ -73,6 +73,20 @@ def read_contract(ws: Workspace) -> dict:
     return data
 
 
+def same_contract(current: str | None, approved: str | None) -> bool:
+    """Whether product.json still says what the CTO approved: the same name, checks and serve command.
+    Its description text (setup, run, release notes) may change without a new approval."""
+    if current is None or approved is None:
+        return current == approved
+    try:
+        a, b = json.loads(current), json.loads(approved)
+    except ValueError:
+        return current == approved
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return current == approved
+    return all(a.get(k) == b.get(k) for k in ('name', 'checks', 'serve'))
+
+
 def verify_product(ws: Workspace, env: dict | None = None, redact=None, timeout: int | None = None,
                    record: bool = True, ids: list[str] | None = None) -> dict:
     """Run the acceptance checks on this computer. `env`: the project's keys; `redact` hides their values before

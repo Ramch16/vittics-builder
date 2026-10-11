@@ -52,6 +52,8 @@ BUILTIN_ENGINES: dict[str, dict] = {
         "prompt": "stdin",
         "output": "claude-json",
         "subscription": True,       # drop ANTHROPIC_API_KEY so the CLI bills its own login, not the API key
+        # A run ends when the agent replies, so a background command's result would never reach it.
+        "env": {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"},
         "verified": True,           # run against Vittics Builder's tests and a real Claude Code 2.1 install
     },
 }
@@ -96,9 +98,11 @@ UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hi
 def protocol(names: list[str]) -> str:
     """How the CLI agent reports Vittics Builder actions, limited to the ones this run allows."""
     rows = [f'  "{ACTIONS[n][0]}": {ACTIONS[n][1]}' for n in names if n in ACTIONS]
+    foreground = ("Run every command in the foreground and wait for it to finish before you reply: this run ends "
+                  "when you reply, and you are not resumed for background work.\n")
     if not rows:
-        return "Finish with a short plain summary of what you did."
-    guidance = ("If your sandbox blocks Docker, ports or dependencies, request checks with run_checks instead of retrying blocked commands. "
+        return foreground + "Finish with a short plain summary of what you did."
+    guidance = foreground + ("If your sandbox blocks Docker, ports or dependencies, request checks with run_checks instead of retrying blocked commands. "
                 "Use only IDs from the CTO-approved product.json. Finish that reply with run_checks alone; Vittics will run them "
                 "on this computer and resume you with the actual results before you submit work.\n"
                 if "run_approved_checks" in names else "")
@@ -169,6 +173,7 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
     env = dict(os.environ)
     if engine.get("subscription"):
         env.pop("ANTHROPIC_API_KEY", None)
+    env.update(engine.get("env") or {})
     workdir = cwd or tempfile.mkdtemp(prefix="vittics-chat-")
     from .platforms import UnsafeCommand, safe_argv
     try:
