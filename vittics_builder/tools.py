@@ -139,7 +139,13 @@ TOOL_SPECS: dict[str, dict] = {
         "input_schema": _obj(
             {"score": {"type": "integer", "minimum": 0, "maximum": 100},
              "verdict": {"type": "string", "enum": ["approve", "request_changes"]},
-             "notes": {"type": "string", "description": "Concrete findings the author can act on"}},
+             "notes": {"type": "string", "description": "Concrete findings the author can act on"},
+             "acceptance": {"type": "array", "description": "Required for release integration: one entry for every PRD acceptance criterion, including manual checks.",
+                            "items": {"type": "object", "properties": {
+                                "criterion": {"type": "string"},
+                                "status": {"type": "string", "enum": ["passed", "failed", "unverified"]},
+                                "evidence": {"type": "string"}},
+                                "required": ["criterion", "status", "evidence"]}}},
             ["score", "verdict", "notes"],
         ),
     },

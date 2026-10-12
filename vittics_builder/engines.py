@@ -65,7 +65,7 @@ ACTIONS = {
     'submit_evaluation': ('evaluation','{"scores": {"functionality": 0, "ux": 0, "security": 0, "cost": 0, "architecture": 0, "scalability": 0, "customer_value": 0, "maintainability": 0}, "findings": [{"title": "...", "body": "evidence", "severity": "error"}]}'),
     "submit_plan": ("plan", '[{"key": "short-id", "title": "...", "description": "what to build and how to tell it '
                             'is done", "role": "role id", "depends_on": ["other-key"]}]'),
-    "submit_review": ("review", '{"score": 0-100, "verdict": "approve" or "request_changes", "notes": "concrete findings"}'),
+    "submit_review": ("review", '{"score": 0-100, "verdict": "approve" or "request_changes", "notes": "concrete findings", "acceptance": [{"criterion": "PRD criterion", "status": "passed|failed|unverified", "evidence": "observed result"}]}'),
     "submit_assessment": ("assessment", '{"recommendation": "build_internal" | "build_to_sell" | "park" | "drop", '
                                         '"feasibility": "achievable" | "achievable_with_risks" | "not_achievable", '
                                         '"summary": "three to six sentences"}'),
@@ -92,7 +92,7 @@ class EngineUnavailable(EngineError):
 
 
 UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hit your .{0,30}limit|quota|too many requests|"
-                         r"not logged in|please run /login|overloaded", re.I)
+                         r"not logged in|please run /login|overloaded|selected model is at capacity|temporarily unavailable", re.I)
 
 
 def protocol(names: list[str]) -> str:
@@ -204,7 +204,8 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
         out["input_tokens"] = int(m[1].replace(",", ""))           # a total only: no input/output split
     if out["is_error"] and not out["text"]:
         out["text"] = (proc.stderr or "").strip()[-2000:]     # the error is at the end (Codex echoes the prompt first)
-    if out["is_error"] and (m := UNAVAILABLE.search(out["text"])):
-        start = out["text"].rfind("\n", 0, m.start()) + 1
-        raise EngineUnavailable(out["text"][start:].strip()[:300])
+    failure_text = out["text"] + "\n" + (proc.stderr or "")[-2000:]
+    if out["is_error"] and (m := UNAVAILABLE.search(failure_text)):
+        start = failure_text.rfind("\n", 0, m.start()) + 1
+        raise EngineUnavailable(failure_text[start:].strip()[:300])
     return out

@@ -148,3 +148,114 @@ def test_agents_run_commands_in_the_foreground():
 
 def test_keep_awake_can_be_turned_off():
     assert keep_awake(False) == ""
+
+
+def test_planning_proposals_are_not_scheduled_as_duplicate_build_work(tmp_path):
+    from vittics_builder.agent import RunResult
+    co = Company(tmp_path, provider=MockProvider(), create=True)
+    p = co.pipeline.create_project('Calculator', 'A small calculator', size='small')
+    pm = co.org.pick(kind='product')
+    result = RunResult()
+    co.tickets.agent_tool(pm, 'create_ticket', {
+        'title': 'Implement calculator', 'description': 'Proposal for the architect',
+        'type': 'task', 'priority': 'medium', 'role': 'frontend_engineer'
+    }, p['id'], None, result)
+    task = co.db.one("SELECT * FROM tasks WHERE project_id=? AND origin='agent'", p['id'])
+    assert task['status'] == 'backlog'
+    assert co.pipeline._ready_tasks(p['id']) == []
+
+
+def test_workers_receive_recorded_approval_despite_stale_files(tmp_path):
+    provider = Recording()
+    co = Company(tmp_path, provider=provider, create=True)
+    p, _ = through_design(co, 'small')
+    assert any('Recorded project decisions' in text and 'prd: approved' in text
+               for _, text in provider.prompts)
+
+
+def test_capacity_during_review_resumes_without_rebuilding(tmp_path, monkeypatch):
+    import pytest
+    from vittics_builder.engines import EngineUnavailable
+    co = Company(tmp_path, provider=MockProvider(), create=True)
+    p = co.pipeline.create_project('Resume', 'A library', size='small')
+    task = co.tickets.create(p['id'], 'Core', 'Build core', 'Lucky', status='todo', role='backend_engineer')
+    ws = co.pipeline.workspace(p)
+    original = co.runtime.run
+    counts = {'builder': 0, 'reviewer': 0}
+    def run(agent, instructions, workspace, **kw):
+        if (kw.get('meta') or {}).get('author'):
+            counts['reviewer'] += 1
+            if counts['reviewer'] == 1:
+                raise EngineUnavailable('Selected model is at capacity')
+        else:
+            counts['builder'] += 1
+        return original(agent, instructions, workspace, **kw)
+    monkeypatch.setattr(co.runtime, 'run', run)
+    with pytest.raises(EngineUnavailable):
+        co.pipeline._run_task(p, task, ws)
+    assert co.db.one('SELECT attempts FROM tasks WHERE id=?', task['id'])['attempts'] == 0
+    assert co.pipeline._run_task(p, task, ws)
+    assert counts['builder'] == 1
+
+
+def test_release_review_cannot_approve_unverified_acceptance(tmp_path):
+    import pytest
+    from vittics_builder.agent import RunResult
+    from vittics_builder.tools import ToolError
+    co = Company(tmp_path, provider=MockProvider(), create=True)
+    qa = co.org.pick(kind='qa')
+    args = {'score': 90, 'verdict': 'approve', 'notes': 'Automated tests pass'}
+    with pytest.raises(ToolError, match='requires acceptance evidence'):
+        co.runtime._execute(qa, 'submit_review', args, None, RunResult(), None, {'purpose':'integration'}, 0)
+    args['acceptance'] = [{'criterion':'Keyboard journey', 'status':'unverified', 'evidence':'Browser access missing'}]
+    with pytest.raises(ToolError, match='Cannot approve'):
+        co.runtime._execute(qa, 'submit_review', args, None, RunResult(), None, {'purpose':'integration'}, 0)
+    args['verdict'] = 'request_changes'
+    result = RunResult()
+    co.runtime._execute(qa, 'submit_review', args, None, result, None, {'purpose':'integration'}, 0)
+    assert result.review['acceptance'][0]['status'] == 'unverified'
+
+
+def test_missing_review_verdict_does_not_charge_builder_rework(tmp_path, monkeypatch):
+    import pytest
+    from vittics_builder.agent import RunResult
+    from vittics_builder.pipeline import PipelineError
+    co = Company(tmp_path, provider=MockProvider(), create=True)
+    p = co.pipeline.create_project('Review', 'A library', size='small')
+    task = co.tickets.create(p['id'], 'Core', 'Build core', 'Lucky', status='todo', role='backend_engineer')
+    original = co.runtime.run
+    def run(agent, instructions, workspace, **kw):
+        if (kw.get('meta') or {}).get('author'):
+            return RunResult(completed=True, text='No structured verdict')
+        return original(agent, instructions, workspace, **kw)
+    monkeypatch.setattr(co.runtime, 'run', run)
+    with pytest.raises(PipelineError, match='Review is incomplete'):
+        co.pipeline._run_task(p, task, co.pipeline.workspace(p))
+    saved = co.db.one('SELECT * FROM tasks WHERE id=?', task['id'])
+    assert saved['attempts'] == 0 and saved['status'] == 'in_review'
+    assert not co.db.one('SELECT 1 FROM reviews WHERE task_id=?', task['id'])
+
+
+def test_parallel_interruption_keeps_candidate_for_review(tmp_path, monkeypatch):
+    import pytest
+    from vittics_builder.engines import EngineUnavailable
+    co = Company(tmp_path, provider=MockProvider(), create=True)
+    p = co.pipeline.create_project('Retain', 'A library', size='small')
+    task = co.tickets.create(p['id'], 'Core', 'Build core', 'Lucky', status='todo', role='backend_engineer')
+    ws = co.pipeline.workspace(p)
+    original = co.runtime.run
+    counts = {'builders': 0, 'reviews': 0}
+    def run(agent, instructions, workspace, **kw):
+        if (kw.get('meta') or {}).get('author'):
+            counts['reviews'] += 1
+            if counts['reviews'] == 1:
+                raise EngineUnavailable('Selected model is at capacity')
+        else:
+            counts['builders'] += 1
+        return original(agent, instructions, workspace, **kw)
+    monkeypatch.setattr(co.runtime, 'run', run)
+    with pytest.raises(EngineUnavailable):
+        co.pipeline._run_parallel(p, [task], ws)
+    assert ws.git('branch', '--list', 'recovery/*').strip()
+    assert co.pipeline._run_task(p, task, ws)
+    assert counts['builders'] == 1

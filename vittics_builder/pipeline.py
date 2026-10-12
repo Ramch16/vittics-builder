@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-from .agent import AgentRuntime
+from .agent import AgentRuntime, RunResult
 from .costs import spent
 from .config import Settings
 from .db import DB, now
@@ -44,11 +44,11 @@ STAGE_LABELS = {
     "build": "Building", "escalation": "Escalated to CTO", "machine_check": "Preparing this computer",
     "release_approval": "Release with CTO", "signoff": "Sign-off with CEO", "done": "Ready for deployment",
     "deploying": "Deploying", "deploy_approval": "Deployment go-ahead", "deploy_failed": "Deployment failed, with CTO",
-    "live": "Live in production",
+    "live": "Running",
 }
 HUMAN_APPROVED, HUMAN_REJECTED = 92, 35
 MILESTONES = {"release_approval": "Ready for release review", "release_blocked": "Release blocked",
-              "done": "Signed off", "paused": "Paused", "live": "Live in production",
+              "done": "Signed off", "paused": "Paused", "live": "Running",
               "deploy_failed": "Deployment failed"}
 PURPOSES = {"internal": "for internal use", "commercial": "to sell"}
 # small: a short PRD, one reviewer per ticket, one repair attempt and no audits. standard: the full process.
@@ -629,7 +629,7 @@ class Pipeline:
         role_list = "\n".join(f"- {r['id']}: {r['title']}" for r in roles)
         ask = (f"Project \"{p['name']}\". Read docs/PRD.md (and docs/DESIGN.md if it exists), then write the "
                "technical design to docs/ARCHITECTURE.md.\n"
-               "Finish by calling submit_plan with the build tasks. Assign each task to one of these roles:\n"
+               "Review existing backlog proposals first; consolidate overlapping work into one authoritative plan. Leave superseded proposals in backlog, not scheduled alongside the plan. Finish by calling submit_plan with the build tasks. Assign each task to one of these roles:\n"
                f"{role_list}\nUse only the roles this product needs. Where the team has them, include tasks for "
                "run/deploy setup, automated tests and user documentation.\n" + CONTRACT_GUIDE)
         if p.get("size") == "small":
@@ -767,7 +767,7 @@ class Pipeline:
                 integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
                                  "install it, run the full test suite and try the main flows. Write what you ran and "
                                  "what you found to docs/QA_REPORT.md, including anything that does not work. "
-                                 "Finish by calling submit_review; request_changes if any required flow fails.\n\n"
+                                 "Finish by calling submit_review; request_changes if any required flow fails OR any required acceptance check has not been executed. Passing automated commands do not satisfy manual accessibility, visual or other unexecuted requirements. Supply the acceptance array in submit_review with a criterion-by-criterion evidence checklist; do not approve incomplete verification.\n\n"
                                  + evidence(checked),
                                  ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket})
                 ws.commit(f"Release check ({qa['name']})")
@@ -991,7 +991,17 @@ class Pipeline:
                 if wt.changed_files() != "(no uncommitted changes)":
                     wt.commit(f"[{task['key']}] work in progress")
                 results[task["id"]] = self._merge_ticket(p, task, ws, branch, ok)
-            except Exception as exc:            # surfaced after every thread has finished
+            except Exception as exc:            # retain the candidate before removing its worktree
+                if 'wt' in locals():
+                    try:
+                        wt.commit(f"[{task['key']}] interrupted work")
+                        recovery = f"recovery/t-{task['id']}-{time.time_ns()}"
+                        ws.git("branch", recovery, branch)
+                        note(self.db, task["id"], "Vittics Builder",
+                             f"Interrupted candidate preserved on {recovery} before retry.")
+                        self._merge_ticket(p, task, ws, branch, False)
+                    except Exception as preserve_error:
+                        errors.append(preserve_error)
                 errors.append(exc)
             finally:
                 try:
@@ -1116,7 +1126,22 @@ class Pipeline:
                     "progress on it, file tickets for anything outside it, and transfer it if another department "
                     "should own it.")
             meta = {"task_key": task["key"], "ticket_id": task["id"]}
-            res = self.runtime.run(agent, ask, ws, project_id=pid, meta=meta)
+            checkpoint = None
+            try:
+                saved = json.loads(task["result"] or "{}")
+                if (isinstance(saved, dict) and saved.get("review_checkpoint") == 1
+                        and ws.changed_files() == "(no uncommitted changes)"
+                        and saved.get("tree") == ws.git("rev-parse", "HEAD^{tree}").strip()
+                        and saved.get("assignment") == {k: task[k] for k in ("title", "description", "role", "feedback")}):
+                    checkpoint = saved
+            except (ValueError, TypeError):
+                pass
+            if checkpoint:
+                res = RunResult(text=checkpoint["text"], completed=checkpoint["completed"],
+                                route_id=checkpoint.get("route_id"))
+                self.db.log("work", f"Resuming review of [{task['key']}] without rebuilding unchanged work.", pid)
+            else:
+                res = self.runtime.run(agent, ask, ws, project_id=pid, meta=meta)
 
             if res.transfer:                    # the agent handed the ticket to another department
                 if ws.changed_files() != "(no uncommitted changes)":
@@ -1128,6 +1153,11 @@ class Pipeline:
                 return True
 
             changed = ws.changed_files()
+            ws.commit(f"[{task['key']}] candidate for review")
+            self.db.run("UPDATE tasks SET result=? WHERE id=?", json.dumps({
+                "review_checkpoint": 1, "tree": ws.git("rev-parse", "HEAD^{tree}").strip(),
+                "text": res.text, "completed": res.completed, "route_id": res.route_id,
+                "assignment": {k: task[k] for k in ("title", "description", "role", "feedback")}}), task["id"])
             self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
             note(self.db, task["id"], agent["name"], "Submitted for review.\n" + (res.text or "")[:1500])
             findings, approved, scores = [], res.completed, []
@@ -1161,9 +1191,8 @@ class Pipeline:
                 note(self.db, task["id"], checker["name"], self._verdict(check.review), kind="comment")
                 if not check.review:
                     self.db.log("warn", f"{checker['name']} gave no verdict on [{task['key']}].", pid)
-                    approved = False
-                    findings.append(f"{checker['name']} gave no verdict.")
-                    continue
+                    raise PipelineError(f"{checker['name']} gave no verdict. Review is incomplete; "
+                                        "resume to retry review without charging a builder rework attempt.")
                 if not check.completed:
                     approved = False
                     findings.append(f"{checker['name']} did not complete the review.")
