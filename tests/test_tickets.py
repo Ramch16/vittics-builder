@@ -264,6 +264,7 @@ def test_agent_ticket_limits(co):
     other = co.pipeline.create_project("Other", "Another product")
     with pytest.raises(TicketError, match="another project"):
         co.tickets.agent_tool(agent, "comment_ticket", {"ticket": "T-1", "body": "hi"}, other["id"], None, result)
+    co.db.run("UPDATE projects SET stage='build' WHERE id=?", other["id"])
     for _ in range(AGENT_TOTAL_LIMIT):
         co.tickets.agent_tool(agent, "create_ticket", ask, other["id"], None, result)
     statuses = [t["status"] for t in co.tickets.search(other["id"]) if t["origin"] == "agent"]

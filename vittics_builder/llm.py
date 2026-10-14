@@ -231,7 +231,7 @@ class MockProvider:
                 return [[self._call("run_command", command="python -m unittest discover -s tests")],
                         [self._call("write_file", path="docs/QA_REPORT.md",
                                     content="# QA report\n\nRan the unit test suite. All tests passed.\n")],
-                        [self._call("submit_review", score=90, verdict="approve", notes="Demo integration check passed.")]]
+                        [self._call("submit_review", score=90, verdict="approve", notes="Demo integration check passed.", acceptance=[{"criterion": "Demo library behavior", "status": "passed", "evidence": "Unit suite executed successfully"}])]]
             bad = meta.get("author") in self.bad_agents
             first = (self._call("list_files", path=".") if kind == "reviewer"
                      else self._call("run_command", command="python -m unittest discover -s tests"))

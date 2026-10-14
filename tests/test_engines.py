@@ -160,3 +160,14 @@ def test_a_usage_limit_pauses_work_without_blaming_anyone(cli, tmp_path):
     assert co.db.one("SELECT 1 FROM events WHERE kind='paused' AND message LIKE '%Nothing was counted%'")
     assert not co.db.one("SELECT 1 FROM events WHERE kind='error'")
     assert co.runs.recent(co.org.agent("Hari")["id"])[0]["status"] == "failed"
+
+
+@pytest.mark.parametrize('message', ['Selected model is at capacity. Please try a different model.',
+                                     'Service temporarily unavailable'])
+def test_capacity_error_is_unavailable_even_after_partial_stdout(tmp_path, message):
+    from vittics_builder.engines import run_cli, EngineUnavailable
+    script = tmp_path / 'capacity.py'
+    script.write_text('import sys\nprint("Partial response")\nprint(' + repr(message) + ', file=sys.stderr)\nsys.exit(1)\n')
+    engine = {'command': [sys.executable, str(script)], 'output': 'text', 'prompt': 'stdin'}
+    with pytest.raises(EngineUnavailable):
+        run_cli(engine, system='', prompt='review', cwd=str(tmp_path), model='', write=False, run=False, timeout=10)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.25.0 — 2026-10-12
+- Keep planning proposals in backlog instead of scheduling duplicate implementation work.
+- Share recorded approvals with project workers so stale file wording does not override decisions.
+- Recognize model capacity errors; checkpoint candidates and resume interrupted reviews without rebuilding unchanged work.
+- Preserve interrupted parallel candidates on recovery branches.
+- Require structured release acceptance evidence and reject approvals with explicitly unverified or failed items.
+- Label running projects accurately without implying every local preview is production.
+
 ## 0.24.0 — 2026-10-11
 - Give release auditors candidate-checked host evidence and explicit release-scope guidance to avoid unnecessary full-suite reruns.
 - Request self-contained graphical prototypes during requirements design and reference them in approval summaries.

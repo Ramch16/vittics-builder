@@ -75,7 +75,11 @@ def test_missing_review_cannot_pass_task(co, monkeypatch):
         return original(agent, *args, **kwargs)
     monkeypatch.setattr(co.runtime, 'run', run)
     start_build(co)
-    assert decide_next(co, 'cto')['stage'] == 'escalation'
+    from vittics_builder.pipeline import PipelineError
+    with pytest.raises(PipelineError, match='Review is incomplete'):
+        decide_next(co, 'cto')
+    assert not co.db.one("SELECT 1 FROM tasks WHERE attempts>0")
+    assert not co.db.one("SELECT 1 FROM approvals WHERE kind='escalation'")
 
 
 def test_integration_failure_repairs_then_blocks_without_override(co, monkeypatch):

@@ -87,6 +87,16 @@ class AgentRuntime:
 
     def run(self, agent: dict, instructions: str, ws: Workspace | None, **kw) -> RunResult:
         """One assignment, or one chat reply when `chat_with` is set. Logged live, and open to steering."""
+        pid = kw.get("project_id")
+        if pid:
+            decisions = self.db.all(
+                "SELECT kind, status, decided_by, feedback, decided_at FROM approvals "
+                "WHERE project_id=? AND status IN ('approved','rejected') ORDER BY id DESC LIMIT 12", pid)
+            if decisions:
+                instructions += ("\n\nRecorded project decisions (newest first). These supersede stale "
+                                 "approval-pending wording in project files; approval is not evidence that tests passed:\n"
+                                 + "\n".join(f"- {d['kind']}: {d['status']} by {d['decided_by']} "
+                                             f"at {d['decided_at']}: {d['feedback']}" for d in decisions))
         if not self.runs:
             return self._run(agent, instructions, ws, **kw)
         meta = dict(kw.get("meta") or {})
@@ -435,7 +445,21 @@ class AgentRuntime:
             score = float(args["score"])
             if not math.isfinite(score) or not 0 <= score <= 100 or args["verdict"] not in ("approve", "request_changes"):
                 raise ToolError("Review needs a score from 0 to 100 and approve or request_changes.")
+            acceptance = args.get("acceptance")
+            if meta.get("purpose") == "integration":
+                if not isinstance(acceptance, list) or not acceptance:
+                    raise ToolError("Release review requires acceptance evidence for every PRD criterion, including manual checks.")
+            if acceptance is not None:
+                if not isinstance(acceptance, list) or any(
+                    not isinstance(item, dict) or item.get("status") not in ("passed", "failed", "unverified")
+                    or not all(isinstance(item.get(k), str) and item[k].strip() for k in ("criterion", "evidence"))
+                    for item in acceptance):
+                    raise ToolError("Acceptance entries need criterion, status and observed evidence or the missing prerequisite.")
+                if args["verdict"] == "approve" and any(item["status"] != "passed" for item in acceptance):
+                    raise ToolError("Cannot approve with failed or unverified acceptance criteria. Request changes and identify the gaps.")
             result.review = {"score": score, "verdict": args["verdict"], "notes": args.get("notes", "")}
+            if acceptance is not None:
+                result.review["acceptance"] = acceptance
             return "Review received."
         if name == "delegate":
             colleague = self.org.pick(role=args["role"], project_id=project_id, exclude=agent["id"])
