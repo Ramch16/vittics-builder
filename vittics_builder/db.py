@@ -349,7 +349,7 @@ class DB:
         if 'run_id' not in usage_columns:
             self.conn.execute('ALTER TABLE usage ADD COLUMN run_id INTEGER')
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(memories)")}
-        for column, default in (("category", "decision"), ("source", "")):
+        for column, default in (("category", "decision"), ("source", ""), ("evidence_files", "{}")):
             if column not in have:
                 self.conn.execute(f"ALTER TABLE memories ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
         had_memory_index = self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='memory_search'").fetchone()

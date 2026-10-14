@@ -375,7 +375,8 @@ class AgentRuntime:
         if name == "remember" and self.memory:
             return self.memory.remember(args.get("text", ""), agent["name"], project_id, args.get("scope", "project"),
                                         args.get('category', 'decision'),
-                                        args.get('source') or (f"run:{meta['run_id']}" if meta.get('run_id') else ''))
+                                        args.get('source') or (f"run:{meta['run_id']}" if meta.get('run_id') else ''),
+                                        evidence_files=args.get('evidence_files'), evidence_root=ws.root if ws else None)
         if name == 'recall_memory' and self.memory:
             return json.dumps(self.memory.search(project_id, args['query'], category=args.get('category'),
                                                 include_history=args.get('include_history', False)))
