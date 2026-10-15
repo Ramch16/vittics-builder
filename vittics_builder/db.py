@@ -375,6 +375,8 @@ class DB:
             if column not in have:
                 self.conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
         # 0.7 added the idea stage: what a product is for, and who proposed it.
+        if 'builder_starts' not in have:
+            self.conn.execute('ALTER TABLE tasks ADD COLUMN builder_starts INTEGER NOT NULL DEFAULT 0')
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(projects)")}
         for column, decl in (("purpose", "TEXT NOT NULL DEFAULT ''"), ("author", "TEXT NOT NULL DEFAULT ''"),
                              ("budget", "REAL NOT NULL DEFAULT 0"), ("budget_warned", "REAL NOT NULL DEFAULT 0"),
@@ -382,7 +384,8 @@ class DB:
                              ("kind", "TEXT NOT NULL DEFAULT 'product'"), ("source", "TEXT NOT NULL DEFAULT ''"),
                              ("base_branch", "TEXT NOT NULL DEFAULT ''"), ("branch", "TEXT NOT NULL DEFAULT ''"),
                              ("checks", "TEXT NOT NULL DEFAULT '[]'"), ("autopilot", "TEXT NOT NULL DEFAULT 'off'"),
-                             ("size", "TEXT NOT NULL DEFAULT 'standard'")):
+                             ("size", "TEXT NOT NULL DEFAULT 'standard'"),
+                             ("repair_starts", "INTEGER NOT NULL DEFAULT 0")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
                 self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.

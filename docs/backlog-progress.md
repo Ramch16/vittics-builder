@@ -4,6 +4,7 @@ This branch begins the 21-item backlog. It does **not** complete all 21 items an
 
 ## Implemented in this branch
 
+- **Trial orchestration controls:** identical open agent proposals reuse one ticket; durable builder-start and repair-start counters enforce a project-wide repair limit (default one for Small mode). Concurrent reservations cannot exceed the cap; unchanged-candidate review resumes are exempt. See `mini-support-trial-findings.md` for evidence that the reference trial ran installed v0.24, its waiting-time breakdown and remaining limits. This is not a hard token budget or a general semantic deduplication engine.
 - **#1 inventory:** source/test mapping for all 21 proposals, with explicit gaps.
 - **#2/#18 baseline telemetry foundation:** `vittics-builder --home COMPANY benchmark PROJECT --cutoff ISO_TIMESTAMP` exports metadata and recorded usage as JSON. It separates overlapping active time from summed agent time, and unknown costs from known totals. It does not run paid models or infer acceptance from Done status. Controlled trials and aggregate comparisons remain open.
 - **#3/#4 repository intelligence foundation:** `vittics-builder repo-index PATH` returns Python symbols, import edges and content hashes. Add `--changed relative/path.py` to request advisory downstream test selection. Unknown files, dynamic code, unresolved dependencies and missing test links require a full suite. This is Python-only and not a complete API/schema/multi-language architecture graph. Release acceptance is never skipped.

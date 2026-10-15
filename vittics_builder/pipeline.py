@@ -1094,6 +1094,39 @@ class Pipeline:
                 return holder
         return self.org.pick(role=task["role"], project_id=pid) or self.org.pick(kind="builder", project_id=pid)
 
+    def _reserve_builder_start(self, pid: int, tid: int) -> None:
+        """Durably bound actual rebuild launches across tickets, including merge retries.
+
+        Review-only checkpoint resumes do not call this. Interrupted launches
+        remain charged: they may already have consumed tokens or changed files.
+        """
+        limit = (self.s.raw.get('pipeline') or {}).get('max_project_repairs',
+                                                      1 if self.small(pid) else None)
+        if limit is not None and (type(limit) is not int or limit < 0):
+            raise PipelineError('pipeline.max_project_repairs must be a nonnegative integer or null.')
+        with self.db.lock:
+            self.db.conn.execute('SAVEPOINT builder_reservation')
+            try:
+                # Acquire the SQLite write lock before reading counters, including
+                # when another process shares the company database.
+                self.db.run('UPDATE projects SET repair_starts=repair_starts WHERE id=?', pid)
+                task = self.db.one('SELECT builder_starts, attempts, type FROM tasks WHERE id=? AND project_id=?', tid, pid)
+                if not task:
+                    raise PipelineError('Builder task does not belong to this project.')
+                repair = task['builder_starts'] > 0 or task['attempts'] > 0 or task['type'] == 'bug'
+                used = self.db.one('SELECT repair_starts FROM projects WHERE id=?', pid)['repair_starts']
+                if repair and limit is not None and used >= limit:
+                    raise PipelineError(f'Project repair limit reached ({used}/{limit}). No builder was launched. '
+                                        'Review the preserved work before explicitly increasing pipeline.max_project_repairs.')
+                self.db.run('UPDATE tasks SET builder_starts=builder_starts+1 WHERE id=?', tid)
+                if repair:
+                    self.db.run('UPDATE projects SET repair_starts=repair_starts+1 WHERE id=?', pid)
+            except BaseException:
+                self.db.conn.execute('ROLLBACK TO builder_reservation')
+                raise
+            finally:
+                self.db.conn.execute('RELEASE builder_reservation')
+
     def _run_task(self, p: dict, task: dict, ws: Workspace) -> bool:
         pid = p["id"]
         while True:
@@ -1141,6 +1174,11 @@ class Pipeline:
                                 route_id=checkpoint.get("route_id"))
                 self.db.log("work", f"Resuming review of [{task['key']}] without rebuilding unchanged work.", pid)
             else:
+                try:
+                    self._reserve_builder_start(pid, task['id'])
+                except PipelineError:
+                    self.db.run("UPDATE tasks SET status='todo', updated_at=? WHERE id=?", now(), task['id'])
+                    raise
                 res = self.runtime.run(agent, ask, ws, project_id=pid, meta=meta)
 
             if res.transfer:                    # the agent handed the ticket to another department

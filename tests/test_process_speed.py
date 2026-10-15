@@ -196,6 +196,8 @@ def test_capacity_during_review_resumes_without_rebuilding(tmp_path, monkeypatch
     assert co.db.one('SELECT attempts FROM tasks WHERE id=?', task['id'])['attempts'] == 0
     assert co.pipeline._run_task(p, task, ws)
     assert counts['builder'] == 1
+    assert co.pipeline.project(p['id'])['repair_starts'] == 0
+    assert co.db.one('SELECT builder_starts FROM tasks WHERE id=?', task['id'])['builder_starts'] == 1
 
 
 def test_release_review_cannot_approve_unverified_acceptance(tmp_path):

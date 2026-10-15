@@ -119,6 +119,8 @@ sandbox:
 
 pipeline:
   max_rework: 2                  # times a task is sent back before escalating to the CTO
+  # max_project_repairs: 1       # durable project-wide repair launches; default 1 for small, unlimited for standard
+                                # explicit null disables this cap; review-only resumes do not consume it
   check_timeout: 1800            # seconds for each product.json check; they run on this computer, outside agents' sandboxes
   review_checks: true            # full checks before ticket review; agents can request selected approved checks during repairs
   max_delegation_depth: 2       # how deep agents may delegate to other agents

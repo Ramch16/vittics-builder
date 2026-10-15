@@ -51,6 +51,7 @@ def summarize(runs, usage, tasks, cutoff):
         'unpriced_calls': unknown,
         'done_tasks': sum(t['status'] == 'done' for t in tasks),
         'recorded_rework_attempts': sum(t['attempts'] for t in tasks),
+        'recorded_builder_starts': sum(t.get('builder_starts', 0) for t in tasks),
         'verified_accepted_tasks': None,
         'cost_per_verified_accepted_task': None,
         'release_success': None,
@@ -71,14 +72,14 @@ def _snapshot(db, project_id, cutoff):
     instant(cutoff)
     db.conn.execute('SAVEPOINT benchmark_snapshot')
     try:
-        project = db.one('SELECT id, name, stage FROM projects WHERE id=?', project_id)
+        project = db.one('SELECT id, name, stage, repair_starts FROM projects WHERE id=?', project_id)
         if not project:
             raise ValueError(f'No project {project_id}.')
         runs = db.all('SELECT id, ticket_id, purpose, status, started_at, ended_at FROM runs '
                       'WHERE project_id=? ORDER BY id', project_id)
         usage = db.all('SELECT id, run_id, model, input_tokens, output_tokens, cost, priced, created_at '
                        'FROM usage WHERE project_id=? ORDER BY id', project_id)
-        tasks = db.all('SELECT id, status, attempts FROM tasks WHERE project_id=? ORDER BY id', project_id)
+        tasks = db.all('SELECT id, status, attempts, builder_starts FROM tasks WHERE project_id=? ORDER BY id', project_id)
         # Compare parsed times, not lexicographic strings with different offsets.
         runs = [r for r in runs if instant(r['started_at']) <= instant(cutoff)]
         usage = [u for u in usage if instant(u['created_at']) <= instant(cutoff)]
@@ -87,6 +88,7 @@ def _snapshot(db, project_id, cutoff):
                 'runs': runs, 'usage': usage, 'tasks': tasks,
                 'limitations': [
                     'Task status is current snapshot state, not historical state at cutoff.',
+                    'Builder/repair start counters begin at migration; earlier launches are not reconstructed.',
                     'Recorded cost may be estimated or subscription-reported; it is not an invoice.',
                     'Cache input components cannot be reconstructed from historical combined input.',
                     'Between-run time is not classified approval or infrastructure waiting time.',
