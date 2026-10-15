@@ -27,7 +27,7 @@ from .org import Org
 from .performance import Performance
 from .tickets import PRIORITY_ORDER, WORK_KINDS, note, ticket_key, where
 from .tools import Workspace
-from .validation import CONTRACT, CONTRACT_GUIDE, evidence, same_contract, validate_plan, verify_product
+from .validation import CONTRACT, CONTRACT_GUIDE, evidence, same_contract, source_fingerprint, validate_plan, verifier_identity, verify_product
 
 IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
 STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
@@ -792,7 +792,7 @@ class Pipeline:
             if not self._contract_unchanged(p, ws):
                 return
             changed = [f for f in ws.git("diff", "--name-only", checked_head, "HEAD").splitlines() if f.strip()]
-            if any(not f.startswith("docs/") for f in changed):    # QA or the audits changed the product: check again
+            if changed:    # Documentation can contain executable inputs; no blanket exemption.
                 checked = self._host_checks(p, ws)
                 ws.commit("Executable product verification")
             if not checked["passed"]:
@@ -813,7 +813,8 @@ class Pipeline:
                 report += ("\n\nAudits without a verdict (review their reports yourself before approving):\n"
                            + "\n".join(f"- {line}" for line in inconclusive))
             self._approval(p["id"], "release", "cto", f"Release {p['name']}", report,
-                           {"verified_head": ws.git("rev-parse", "HEAD"), "inconclusive": inconclusive})
+                           {"verified_head": ws.git("rev-parse", "HEAD"), "inconclusive": inconclusive,
+                            "ledger_id": checked.get('ledger_id')})
             self._stage(p["id"], "release_approval")
         finally:
             self.releasing.discard(pid)
@@ -909,9 +910,24 @@ class Pipeline:
         current = ws.resolve(CONTRACT)
         if not current.is_file() or not same_contract(current.read_text(encoding="utf-8"), self._approved_contract(p["id"])):
             return {"passed": False, "checks": [], "errors": ["Acceptance contract changed or has not been approved; no host commands ran."], "recorded": False}
-        return verify_product(ws, vault.env(p["id"]) if vault else None,
+        before = source_fingerprint(ws) if record else None
+        source_commit = ws.git('rev-parse', 'HEAD') if record else None
+        report = verify_product(ws, vault.env(p["id"]) if vault else None,
                               (lambda text: vault.redact(p["id"], text)) if vault else None,
                               timeout=self.s.check_timeout, record=record)
+        if record:
+            report['source_sha256'] = before
+            try:
+                unchanged = source_fingerprint(ws) == before and ws.git('rev-parse', 'HEAD') == source_commit
+            except (OSError, ValueError):
+                unchanged = False
+            if not unchanged:
+                report['errors'].append('Tracked inputs changed during verification; rerun on a stable candidate.')
+                report['passed'] = report['release_eligible'] = False
+            report['ledger_id'] = self.db.run(
+                "INSERT INTO verification_runs (project_id,source_commit,report,created_at) VALUES (?,?,?,?)",
+                p['id'], source_commit, json.dumps(report), now())
+        return report
 
     @staticmethod
     def _check_findings(report: dict) -> list[str]:
@@ -1375,6 +1391,12 @@ class Pipeline:
             ws = self.workspace(self.project(pid))
             if ws.changed_files() != "(no uncommitted changes)" or ws.git("rev-parse", "HEAD") != payload.get("verified_head"):
                 raise PipelineError("Product changed after verification. Reject with guidance to rebuild and recheck.")
+            if a['kind'] in ('release', 'signoff'):
+                entry = self.db.one('SELECT * FROM verification_runs WHERE id=? AND project_id=?', payload.get('ledger_id'), pid)
+                proof = json.loads(entry['report']) if entry else {}
+                if (not proof.get('release_eligible') or proof.get('source_sha256') != source_fingerprint(ws)
+                        or proof.get('verifier') != verifier_identity()):
+                    raise PipelineError('Release evidence is missing, failed or stale; rerun acceptance.')
         self.db.run("UPDATE approvals SET status=?, feedback=?, decided_by=?, decided_at=? WHERE id=?",
                     decision, feedback, who, now(), approval_id)
         self.db.log("decision", f"{a['title']}: {decision}" + (f" — {feedback}" if feedback else ""), pid, actor=who)
