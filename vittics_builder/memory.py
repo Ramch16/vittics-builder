@@ -7,6 +7,9 @@ assignment, from its project and company-wide, are given to the agent.
 from __future__ import annotations
 
 import re
+import hashlib
+import json
+from pathlib import Path
 
 from .db import DB, now
 
@@ -20,6 +23,8 @@ MEMORY_TOOL_SPECS = {
             "text": {"type": "string", "description": "One or two sentences"},
             "category": {"type": "string", "enum": list(CATEGORIES)},
             "source": {"type": "string", "description": "Evidence reference: document, ticket, or discussion"},
+            "evidence_files": {"type": "array", "items": {"type": "string"},
+                               "description": "Project-relative files supporting this fact; edits invalidate recall"},
             "scope": {"type": "string", "enum": ["project", "company"],
                       "description": "project (default) or company-wide"}}, "required": ["text"]},
     },
@@ -45,21 +50,51 @@ class Memory:
         self.db = db
 
     def remember(self, text: str, author: str, project_id: int | None, scope: str = "project",
-                 category: str = "decision", source: str = "") -> str:
+                 category: str = "decision", source: str = "", evidence_files: list[str] | None = None,
+                 *, evidence_root: Path | None = None) -> str:
         if scope not in ('project', 'company') or category not in CATEGORIES:
             raise ValueError('Use a supported memory scope and category.')
         text = " ".join(str(text).split())[:4000]
         if len(text) < 8:
             raise ValueError("Write the fact in a sentence or two.")
         pid = None if scope == "company" or not project_id else project_id
+        if evidence_files and not pid:
+            raise ValueError('File evidence requires project-scoped memory.')
+        if evidence_files is not None and (not isinstance(evidence_files, list) or len(evidence_files) > 50
+                                          or any(not isinstance(p, str) for p in evidence_files)):
+            raise ValueError('Use at most 50 project-relative evidence paths.')
+        hashes = {p: self._digest(pid, p, evidence_root) for p in evidence_files or []}
         same = self.db.one("SELECT id FROM memories WHERE lower(text)=lower(?) AND project_id IS ? AND category=?",
                            text, pid, category)
         if same:
+            if hashes:
+                self.db.run('UPDATE memories SET evidence_files=?, source=? WHERE id=?',
+                            json.dumps(hashes, sort_keys=True), str(source)[:1000], same['id'])
             return "Already remembered."
-        self.db.run("INSERT INTO memories (project_id, author, text, created_at, category, source) VALUES (?,?,?,?,?,?)",
-                    pid, author, text, now(), category, str(source)[:1000])
+        self.db.run("INSERT INTO memories (project_id, author, text, created_at, category, source, evidence_files) "
+                    "VALUES (?,?,?,?,?,?,?)", pid, author, text, now(), category, str(source)[:1000],
+                    json.dumps(hashes, sort_keys=True))
         self.db.log("memory", f"{author} remembered: {text[:120]}", project_id, actor=author)
         return "Remembered" + (" for the whole company." if pid is None else " for this project.")
+
+    def _digest(self, project_id, path, evidence_root=None):
+        project = self.db.one('SELECT workspace FROM projects WHERE id=?', project_id)
+        if not project or Path(path).is_absolute() or '..' in Path(path).parts:
+            raise ValueError('Evidence must be inside the project workspace.')
+        root = Path(evidence_root or project['workspace']).resolve()
+        target = (root/path).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
+            raise ValueError('Evidence file is missing or outside the project.')
+        if target.stat().st_size > 5_000_000:
+            raise ValueError('Evidence file exceeds 5 MB.')
+        return hashlib.sha256(target.read_bytes()).hexdigest()
+
+    def _current(self, row):
+        try:
+            evidence = json.loads(row.get('evidence_files', '{}'))
+            return all(self._digest(row['project_id'], p) == digest for p, digest in evidence.items())
+        except (OSError, ValueError, AttributeError):
+            return False
 
     def recall(self, project_id: int | None, about: str, limit: int = 8, *, category: str | None = None,
                include_history: bool = False) -> list[dict]:
@@ -87,9 +122,10 @@ class Memory:
                                'WHERE memory_search MATCH ?' + where +
                                ' ORDER BY bm25(memory_search), m.id DESC LIMIT ?', query, *args, limit)
             if rows:
-                return rows
+                return [r for r in rows if self._current(r)]
             return []
-        return self.db.all('SELECT m.* FROM memories m WHERE 1=1' + where + ' ORDER BY m.id DESC LIMIT ?', *args, limit)
+        return [r for r in self.db.all('SELECT m.* FROM memories m WHERE 1=1' + where +
+                                      ' ORDER BY m.id DESC LIMIT ?', *args, limit) if self._current(r)]
 
     def list(self, project_id: int | None = None, limit: int = 50) -> list[dict]:
         if project_id:

@@ -103,6 +103,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument('query'); p.add_argument('--project', type=int); p.add_argument('--category')
     p.add_argument('--history', action='store_true', help='Include other projects')
     sub.add_parser('routing', help='Model performance evidence and costs')
+    p = sub.add_parser('benchmark', help='Export recorded project metrics as JSON; does not run agents')
+    p.add_argument('project', type=int)
+    p.add_argument('--cutoff', help='Timezone-qualified ISO timestamp (default: now)')
+    p = sub.add_parser('repo-index', help='Inspect Python symbols/imports without executing repository code')
+    p.add_argument('path')
+    p.add_argument('--changed', nargs='*', help='Report conservative impact for repository-relative paths')
     p = sub.add_parser("export", help="Package a signed-off product as a zip")
     p.add_argument("project", type=int); p.add_argument("--output", required=True)
     p = sub.add_parser('learn',help='Review learned strategy evidence')
@@ -253,6 +259,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch(args) -> int:
+    if args.cmd == 'repo-index':
+        from .repository import index, impact
+        report = index(args.path)
+        print(json.dumps(impact(report, args.changed) if args.changed is not None else report, indent=2))
+        return 0
     if args.cmd == "desktop":                  # creates the company itself on first launch
         from .desktop import main as desktop_main
         desktop_main(args.home, args.port)
@@ -342,6 +353,10 @@ def _dispatch(args) -> int:
                                         include_history=args.history), indent=2))
     elif args.cmd == 'routing':
         print(json.dumps(co.router.summary(), indent=2))
+    elif args.cmd == 'benchmark':
+        from .benchmarks import snapshot
+        from .db import now
+        print(json.dumps(snapshot(co.db, args.project, args.cutoff or now()), indent=2))
     elif args.cmd == "run":
         if co.pipeline.project(args.project)["stage"] == "paused":
             co.pipeline.resume(args.project, co.s.human(role))

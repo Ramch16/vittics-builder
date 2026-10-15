@@ -27,7 +27,7 @@ from .org import Org
 from .performance import Performance
 from .tickets import PRIORITY_ORDER, WORK_KINDS, note, ticket_key, where
 from .tools import Workspace
-from .validation import CONTRACT, CONTRACT_GUIDE, evidence, same_contract, validate_plan, verify_product
+from .validation import CONTRACT, CONTRACT_GUIDE, evidence, same_contract, source_fingerprint, validate_plan, verifier_identity, verify_product
 
 IDEA_STAGES = ["idea", "idea_review", "idea_decision", "plan", "plan_approval"]
 STAGES = [*IDEA_STAGES, "prd", "prd_approval", "architecture", "architecture_approval", "build",
@@ -792,7 +792,7 @@ class Pipeline:
             if not self._contract_unchanged(p, ws):
                 return
             changed = [f for f in ws.git("diff", "--name-only", checked_head, "HEAD").splitlines() if f.strip()]
-            if any(not f.startswith("docs/") for f in changed):    # QA or the audits changed the product: check again
+            if changed:    # Documentation can contain executable inputs; no blanket exemption.
                 checked = self._host_checks(p, ws)
                 ws.commit("Executable product verification")
             if not checked["passed"]:
@@ -813,7 +813,8 @@ class Pipeline:
                 report += ("\n\nAudits without a verdict (review their reports yourself before approving):\n"
                            + "\n".join(f"- {line}" for line in inconclusive))
             self._approval(p["id"], "release", "cto", f"Release {p['name']}", report,
-                           {"verified_head": ws.git("rev-parse", "HEAD"), "inconclusive": inconclusive})
+                           {"verified_head": ws.git("rev-parse", "HEAD"), "inconclusive": inconclusive,
+                            "ledger_id": checked.get('ledger_id')})
             self._stage(p["id"], "release_approval")
         finally:
             self.releasing.discard(pid)
@@ -909,9 +910,24 @@ class Pipeline:
         current = ws.resolve(CONTRACT)
         if not current.is_file() or not same_contract(current.read_text(encoding="utf-8"), self._approved_contract(p["id"])):
             return {"passed": False, "checks": [], "errors": ["Acceptance contract changed or has not been approved; no host commands ran."], "recorded": False}
-        return verify_product(ws, vault.env(p["id"]) if vault else None,
+        before = source_fingerprint(ws) if record else None
+        source_commit = ws.git('rev-parse', 'HEAD') if record else None
+        report = verify_product(ws, vault.env(p["id"]) if vault else None,
                               (lambda text: vault.redact(p["id"], text)) if vault else None,
                               timeout=self.s.check_timeout, record=record)
+        if record:
+            report['source_sha256'] = before
+            try:
+                unchanged = source_fingerprint(ws) == before and ws.git('rev-parse', 'HEAD') == source_commit
+            except (OSError, ValueError):
+                unchanged = False
+            if not unchanged:
+                report['errors'].append('Tracked inputs changed during verification; rerun on a stable candidate.')
+                report['passed'] = report['release_eligible'] = False
+            report['ledger_id'] = self.db.run(
+                "INSERT INTO verification_runs (project_id,source_commit,report,created_at) VALUES (?,?,?,?)",
+                p['id'], source_commit, json.dumps(report), now())
+        return report
 
     @staticmethod
     def _check_findings(report: dict) -> list[str]:
@@ -1094,6 +1110,39 @@ class Pipeline:
                 return holder
         return self.org.pick(role=task["role"], project_id=pid) or self.org.pick(kind="builder", project_id=pid)
 
+    def _reserve_builder_start(self, pid: int, tid: int) -> None:
+        """Durably bound actual rebuild launches across tickets, including merge retries.
+
+        Review-only checkpoint resumes do not call this. Interrupted launches
+        remain charged: they may already have consumed tokens or changed files.
+        """
+        limit = (self.s.raw.get('pipeline') or {}).get('max_project_repairs',
+                                                      1 if self.small(pid) else None)
+        if limit is not None and (type(limit) is not int or limit < 0):
+            raise PipelineError('pipeline.max_project_repairs must be a nonnegative integer or null.')
+        with self.db.lock:
+            self.db.conn.execute('SAVEPOINT builder_reservation')
+            try:
+                # Acquire the SQLite write lock before reading counters, including
+                # when another process shares the company database.
+                self.db.run('UPDATE projects SET repair_starts=repair_starts WHERE id=?', pid)
+                task = self.db.one('SELECT builder_starts, attempts, type FROM tasks WHERE id=? AND project_id=?', tid, pid)
+                if not task:
+                    raise PipelineError('Builder task does not belong to this project.')
+                repair = task['builder_starts'] > 0 or task['attempts'] > 0 or task['type'] == 'bug'
+                used = self.db.one('SELECT repair_starts FROM projects WHERE id=?', pid)['repair_starts']
+                if repair and limit is not None and used >= limit:
+                    raise PipelineError(f'Project repair limit reached ({used}/{limit}). No builder was launched. '
+                                        'Review the preserved work before explicitly increasing pipeline.max_project_repairs.')
+                self.db.run('UPDATE tasks SET builder_starts=builder_starts+1 WHERE id=?', tid)
+                if repair:
+                    self.db.run('UPDATE projects SET repair_starts=repair_starts+1 WHERE id=?', pid)
+            except BaseException:
+                self.db.conn.execute('ROLLBACK TO builder_reservation')
+                raise
+            finally:
+                self.db.conn.execute('RELEASE builder_reservation')
+
     def _run_task(self, p: dict, task: dict, ws: Workspace) -> bool:
         pid = p["id"]
         while True:
@@ -1141,6 +1190,11 @@ class Pipeline:
                                 route_id=checkpoint.get("route_id"))
                 self.db.log("work", f"Resuming review of [{task['key']}] without rebuilding unchanged work.", pid)
             else:
+                try:
+                    self._reserve_builder_start(pid, task['id'])
+                except PipelineError:
+                    self.db.run("UPDATE tasks SET status='todo', updated_at=? WHERE id=?", now(), task['id'])
+                    raise
                 res = self.runtime.run(agent, ask, ws, project_id=pid, meta=meta)
 
             if res.transfer:                    # the agent handed the ticket to another department
@@ -1337,6 +1391,12 @@ class Pipeline:
             ws = self.workspace(self.project(pid))
             if ws.changed_files() != "(no uncommitted changes)" or ws.git("rev-parse", "HEAD") != payload.get("verified_head"):
                 raise PipelineError("Product changed after verification. Reject with guidance to rebuild and recheck.")
+            if a['kind'] in ('release', 'signoff'):
+                entry = self.db.one('SELECT * FROM verification_runs WHERE id=? AND project_id=?', payload.get('ledger_id'), pid)
+                proof = json.loads(entry['report']) if entry else {}
+                if (not proof.get('release_eligible') or proof.get('source_sha256') != source_fingerprint(ws)
+                        or proof.get('verifier') != verifier_identity()):
+                    raise PipelineError('Release evidence is missing, failed or stale; rerun acceptance.')
         self.db.run("UPDATE approvals SET status=?, feedback=?, decided_by=?, decided_at=? WHERE id=?",
                     decision, feedback, who, now(), approval_id)
         self.db.log("decision", f"{a['title']}: {decision}" + (f" — {feedback}" if feedback else ""), pid, actor=who)

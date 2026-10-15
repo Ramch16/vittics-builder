@@ -55,9 +55,17 @@ jobs:
           hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "$DMG"
           codesign --verify --deep --strict "$MOUNT/Vittics Builder.app"
           hdiutil detach "$MOUNT"
+      - name: Record release artifact identity
+        run: python desktop/scripts/release_manifest.py --output release-manifest.json "${{ matrix.files }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-manifest
+          path: release-manifest.json
           if-no-files-found: error
           retention-days: 14

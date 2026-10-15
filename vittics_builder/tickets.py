@@ -141,6 +141,20 @@ class Tickets:
     def create(self, project_id: int, title: str, description: str, by: str, type: str = "task",
                priority: str = "medium", status: str = "backlog", role: str | None = None,
                origin: str = "human") -> dict:
+        if origin == 'agent':
+            with self.db.lock:
+                self.db.conn.execute('SAVEPOINT agent_ticket')
+                try:
+                    self.db.run('UPDATE projects SET updated_at=updated_at WHERE id=?', project_id)
+                    return self._create(project_id, title, description, by, type, priority, status, role, origin)
+                except BaseException:
+                    self.db.conn.execute('ROLLBACK TO agent_ticket')
+                    raise
+                finally:
+                    self.db.conn.execute('RELEASE agent_ticket')
+        return self._create(project_id, title, description, by, type, priority, status, role, origin)
+
+    def _create(self, project_id, title, description, by, type, priority, status, role, origin):
         project = self.pipeline.project(project_id)
         title, description = title.strip(), description.strip()
         if not title:
@@ -149,6 +163,13 @@ class Tickets:
         if status not in OPEN:
             raise TicketError("File a ticket as backlog or to do.")
         role = self._work_role(role) if role else self.pipeline._fix_role(project_id)
+        if origin == 'agent':
+            existing = self.db.one("SELECT id FROM tasks WHERE project_id=? AND origin='agent' "
+                                   "AND title=? AND description=? AND role=? AND type=? AND priority=? "
+                                   "AND status IN ('backlog','todo','in_progress','in_review') ORDER BY id LIMIT 1",
+                                   project_id, title, description, role, type, priority)
+            if existing:
+                return self.get(existing['id'])
         ts = now()
         tid = self.db.run(
             "INSERT INTO tasks (project_id, key, title, description, role, status, type, priority, origin, reporter, "

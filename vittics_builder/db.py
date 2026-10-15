@@ -7,6 +7,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS verification_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  source_commit TEXT NOT NULL,
+  report TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS departments (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -349,7 +356,7 @@ class DB:
         if 'run_id' not in usage_columns:
             self.conn.execute('ALTER TABLE usage ADD COLUMN run_id INTEGER')
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(memories)")}
-        for column, default in (("category", "decision"), ("source", "")):
+        for column, default in (("category", "decision"), ("source", ""), ("evidence_files", "{}")):
             if column not in have:
                 self.conn.execute(f"ALTER TABLE memories ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
         had_memory_index = self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='memory_search'").fetchone()
@@ -375,6 +382,8 @@ class DB:
             if column not in have:
                 self.conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
         # 0.7 added the idea stage: what a product is for, and who proposed it.
+        if 'builder_starts' not in have:
+            self.conn.execute('ALTER TABLE tasks ADD COLUMN builder_starts INTEGER NOT NULL DEFAULT 0')
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(projects)")}
         for column, decl in (("purpose", "TEXT NOT NULL DEFAULT ''"), ("author", "TEXT NOT NULL DEFAULT ''"),
                              ("budget", "REAL NOT NULL DEFAULT 0"), ("budget_warned", "REAL NOT NULL DEFAULT 0"),
@@ -382,7 +391,8 @@ class DB:
                              ("kind", "TEXT NOT NULL DEFAULT 'product'"), ("source", "TEXT NOT NULL DEFAULT ''"),
                              ("base_branch", "TEXT NOT NULL DEFAULT ''"), ("branch", "TEXT NOT NULL DEFAULT ''"),
                              ("checks", "TEXT NOT NULL DEFAULT '[]'"), ("autopilot", "TEXT NOT NULL DEFAULT 'off'"),
-                             ("size", "TEXT NOT NULL DEFAULT 'standard'")):
+                             ("size", "TEXT NOT NULL DEFAULT 'standard'"),
+                             ("repair_starts", "INTEGER NOT NULL DEFAULT 0")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
                 self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.
