@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **Benchmark run records, schema v2 (draft).** Records now carry the independent oracle's kind, evaluated tree and
+  run reference, plus per-run caps. `benchmarks.check_semantics` enforces consistency the schema cannot express.
+  `summarize_records` counts a run as accepted only with an independent, nonempty, all-passing oracle, and reports
+  overall release-and-oracle success separately from the conditional release rate. Synthetic data only; not approved for experiments.
 - **Git works in agents' commands when the host sets git config through the environment.** The secret filter
   removed `GIT_CONFIG_KEY_<n>` but kept `GIT_CONFIG_COUNT`, so every git command failed with "missing config key".
   The `GIT_CONFIG_COUNT`/`KEY`/`VALUE` set is now removed together (values can hold credentials), for agents'

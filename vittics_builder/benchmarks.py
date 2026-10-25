@@ -168,6 +168,60 @@ def _total(values):
     return None if any(v is None for v in values) else sum(values)
 
 
+def _accepted(record):
+    """A run counts as accepted only when its status says so AND the independent hidden oracle ran on an evaluated
+    tree with a nonempty, all-passing set of checks. A status alone never counts."""
+    acc = record['acceptance']
+    oracle = acc.get('oracle') or {}
+    return (record['terminal_status'] == 'accepted' and oracle.get('kind') == 'independent_hidden'
+            and bool(oracle.get('evaluated_tree')) and bool(acc['checks'])
+            and all(c['passed'] is True for c in acc['checks']) and acc['all_passed'] is True)
+
+
+def check_semantics(records):
+    """Consistency rules the JSON schema cannot express (benchmark-protocol-draft.md §7). Returns a list of
+    {"run_id", "rule", "detail"}; empty when every record is consistent. Run after validate_record."""
+    issues, seen = [], {}
+    def flag(r, rule, detail):
+        issues.append({'run_id': r.get('run_id'), 'rule': rule, 'detail': detail})
+    for r in records:
+        rid = r['run_id']
+        if rid in seen:
+            flag(r, 'unique-run-id', f'run_id also used by record {seen[rid]}')
+        seen.setdefault(rid, len(seen))
+        start, end = instant(r['started_at'].replace('Z', '+00:00')), r['ended_at']
+        if end is not None and instant(end.replace('Z', '+00:00')) < start:
+            flag(r, 'end-after-start', 'ended_at is before started_at')
+        if end is None and r['terminal_status'] != 'incomplete':
+            flag(r, 'incomplete-has-no-end', f"no ended_at but terminal_status is {r['terminal_status']}")
+        if end is not None and r['terminal_status'] == 'incomplete':
+            flag(r, 'incomplete-has-no-end', 'terminal_status incomplete but ended_at is set')
+        acc, checks = r['acceptance'], r['acceptance']['checks']
+        if r['terminal_status'] == 'accepted' and not _accepted(r):
+            flag(r, 'accepted-needs-independent-oracle',
+                 'accepted requires oracle kind independent_hidden, an evaluated tree and a nonempty all-passing oracle')
+        if acc['all_passed'] is True and (not checks or not all(c['passed'] is True for c in checks)):
+            flag(r, 'all-passed-consistent', 'all_passed is true but checks are empty or not all passed')
+        if acc['all_passed'] is False and checks and all(c['passed'] is True for c in checks):
+            flag(r, 'all-passed-consistent', 'all_passed is false but every check passed')
+        if acc['all_passed'] is not None and not (acc['oracle']['evaluated_tree'] and acc['oracle']['run_ref']):
+            flag(r, 'oracle-references', 'an oracle result needs the evaluated tree and the oracle run reference')
+        cost = r['cost']
+        if cost['basis'] in ('unknown', 'subscription_unpriced') and cost['amount'] is not None:
+            flag(r, 'unknown-cost-is-null', f"basis {cost['basis']} must have amount null, not {cost['amount']}")
+        if cost['basis'] in ('billed', 'estimated') and (cost['amount'] is None or not cost['currency']):
+            flag(r, 'known-cost-complete', 'billed or estimated cost needs an amount and a currency')
+        caps, usage, timing = r['caps'], r['usage'], r['timing']
+        tokens = None if usage['input_tokens'] is None or usage['output_tokens'] is None else usage['input_tokens'] + usage['output_tokens']
+        over = [name for name, used, cap in (('tokens', tokens, caps['max_total_tokens']),
+                                             ('wall seconds', timing['wall_seconds'], caps['max_wall_seconds']),
+                                             ('cost', cost['amount'], caps['max_cost']))
+                if cap is not None and used is not None and used > cap]
+        if over and r['terminal_status'] in ('accepted', 'rejected'):
+            flag(r, 'caps-enforced', f"over cap ({', '.join(over)}) yet ended as {r['terminal_status']}; expected failed or timeout")
+    return issues
+
+
 def summarize_records(records):
     """Per-condition and task-paired summaries of validated run records (benchmark-protocol-draft.md §8–9).
     Failed and incomplete runs count everywhere, including cost. Cost per accepted run is None when no run was
@@ -176,14 +230,19 @@ def summarize_records(records):
     by_condition = {}
     for condition in sorted({r['condition'] for r in records}):
         runs = [r for r in records if r['condition'] == condition]
-        accepted = sum(r['terminal_status'] == 'accepted' for r in runs)
+        accepted = sum(_accepted(r) for r in runs)
         reached = [r for r in runs if r['acceptance']['release_outcome'] in ('released', 'release_blocked')]
         cost = _total(r['cost']['amount'] for r in runs)
+        released_and_accepted = sum(r['acceptance']['release_outcome'] == 'released' and _accepted(r) for r in runs)
         by_condition[condition] = {
             'runs': len(runs), 'tasks': len({r['task_id'] for r in runs}),
             'accepted_runs': accepted, 'acceptance_rate': accepted / len(runs),
-            'release_reliability': (sum(r['acceptance']['release_outcome'] == 'released' for r in reached) / len(reached)
-                                    if reached else None),
+            # Overall: released AND independently accepted, over every run started (failures included).
+            'release_and_oracle_success_rate': released_and_accepted / len(runs),
+            # Conditional: released among runs that reached a release decision; None if none reached it.
+            'conditional_release_rate': (sum(r['acceptance']['release_outcome'] == 'released' for r in reached) / len(reached)
+                                         if reached else None),
+            'runs_reaching_release_gate': len(reached),
             'incomplete_runs': sum(r['ended_at'] is None for r in runs),
             'terminal_statuses': {s: sum(r['terminal_status'] == s for r in runs)
                                   for s in sorted({r['terminal_status'] for r in runs})},
@@ -199,7 +258,7 @@ def summarize_records(records):
         rates = {}
         for condition in ('multi_agent', 'single_agent'):
             runs = [r for r in records if r['task_id'] == task and r['condition'] == condition]
-            rates[condition] = (sum(r['terminal_status'] == 'accepted' for r in runs) / len(runs), len(runs)) if runs else None
+            rates[condition] = (sum(_accepted(r) for r in runs) / len(runs), len(runs)) if runs else None
         if rates['multi_agent'] and rates['single_agent']:
             paired.append({'task_id': task, 'multi_agent_rate': rates['multi_agent'][0],
                            'single_agent_rate': rates['single_agent'][0],

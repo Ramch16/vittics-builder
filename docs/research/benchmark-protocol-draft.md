@@ -76,13 +76,24 @@ Every run produces one record valid against `run-record.schema.json`. That file 
 - Usage keeps input, output, cache-read and cache-write tokens separately where the provider reports them.
 - Failed, timed-out and incomplete runs are kept, along with their cost.
 - Artifact and log hashes link each record to its raw files.
+- **Schema version 2 (Week 2 draft)** adds `acceptance.oracle` (`kind`, `evaluated_tree`, `run_ref`) and per-run `caps`.
+- **Consistency rules beyond the schema** are enforced by `benchmarks.check_semantics`:
+    - unique run IDs;
+    - end not before start;
+    - only `incomplete` runs lack an end;
+    - `accepted` requires the independent hidden oracle, an evaluated tree and a nonempty all-passing result;
+    - `all_passed` must agree with the checks;
+    - an oracle result carries tree and run references;
+    - unknown or subscription-unpriced cost has a null amount, while billed or estimated cost has an amount and currency;
+    - a run over any cap cannot end `accepted` or `rejected`.
 
 ## 8. Metrics
 
 | Metric | Definition |
 | --- | --- |
 | Acceptance rate | accepted runs / all runs, per task × condition |
-| Release reliability | runs reaching `released` / runs that reached the release gate (undefined if none reached it) |
+| Release-and-oracle success (overall) | runs both `released` and accepted by the oracle / **all** runs started |
+| Conditional release rate | runs `released` / runs that reached a release decision (undefined if none reached it). Reported beside the overall rate, never instead of it |
 | Wall time | first start to last end of the run |
 | Active union time | union of agent intervals, overlaps counted once (`benchmarks.summarize`) |
 | Summed agent time | sum of agent intervals |
@@ -96,7 +107,8 @@ Every run produces one record valid against `run-record.schema.json`. That file 
 - Summaries are **task-paired**: for each task, the treatment-minus-baseline difference in acceptance rate over its repeats; then the median and range of those per-task differences, with sample counts.
 - Repeats are clustered by task, so the unit of analysis is the task, not the run. With 6–10 tasks, report descriptive statistics and per-task values. Any interval estimate must resample tasks, not runs.
 - No significance claim from the pilot.
-- `benchmarks.summarize_records` implements these summaries. The synthetic dry run in `evidence/week1/` exercises them: unknown-cost propagation, a failed run, an incomplete run, and a condition with zero accepted runs.
+- `benchmarks.summarize_records` implements these summaries. The synthetic dry runs in `evidence/week1/` (schema v1) and `evidence/week2/` (schema v2) exercise them: unknown-cost propagation, a failed run, an incomplete run, and a condition with zero accepted runs. Week 2 also adds 10 deliberately inconsistent records, each caught by its rule.
+- The matched single-agent condition is specified in `single-agent-baseline-spec.md` (draft, not implemented).
 
 ## 10. Approvals
 

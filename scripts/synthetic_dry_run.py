@@ -3,8 +3,9 @@
     python scripts/synthetic_dry_run.py --out evidence/week1/<capture-id>/synthetic-dry-run
 
 Writes records.jsonl (12 invented runs: 3 tasks x 2 conditions x 2 repeats, every one data_kind "synthetic"),
-validation.json (schema errors per record; all empty when valid) and summary.json
-(benchmarks.summarize_records). The runs are designed to exercise:
+validation.json (schema errors per record; all empty when valid), semantics.json (benchmarks.check_semantics;
+empty when consistent), summary.json (benchmarks.summarize_records) and invalid-variants.json (deliberately
+broken copies with the rule each must trip, and what the checks actually reported). The runs are designed to exercise:
   - an unknown cost (an incomplete run with ended_at null) that must make the condition's total cost unknown;
   - failed, timed-out and provider-unavailable outcomes that still count;
   - a condition with zero accepted runs, whose cost per accepted run must be undefined (null).
@@ -17,7 +18,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from vittics_builder.benchmarks import SCHEMA_PATH, summarize_records, validate_record
+from vittics_builder.benchmarks import SCHEMA_PATH, check_semantics, summarize_records, validate_record
 
 ROOT = Path(__file__).resolve().parent.parent
 HARNESS = "0" * 40                                      # placeholder commit: synthetic records name no real run
@@ -31,7 +32,7 @@ def record(task: str, condition: str, repeat: int, status: str, *, cost: float |
            ended: str | None = "2026-01-01T00:20:00Z", release: str = "released", oracle: bool | None = True) -> dict:
     run = f"{task}-{condition}-{repeat}"
     return {
-        "schema_version": 1, "data_kind": "synthetic", "experiment_id": "dry-run-0", "run_id": run,
+        "schema_version": 2, "data_kind": "synthetic", "experiment_id": "dry-run-0", "run_id": run,
         "task_id": task, "condition": condition, "repeat": repeat,
         "source": {"harness_commit": HARNESS, "starter_tree_sha256": h(f"starter-{task}")},
         "hashes": {k: h(f"{k}-{task}") for k in ("task", "prompt", "oracle", "config")},
@@ -39,7 +40,12 @@ def record(task: str, condition: str, repeat: int, status: str, *, cost: float |
                    "engine_version": None},
         "environment_ref": "synthetic", "started_at": "2026-01-01T00:00:00Z", "ended_at": ended,
         "terminal_status": status, "blocker": None if status in ("accepted", "rejected") else f"synthetic {status}",
-        "acceptance": {"checks": [{"id": "oracle", "passed": oracle}], "all_passed": oracle, "release_outcome": release},
+        "acceptance": {"checks": [{"id": "oracle", "passed": oracle}] if oracle is not None else [],
+                       "all_passed": oracle, "release_outcome": release,
+                       "oracle": {"kind": "independent_hidden" if oracle is not None else "none",
+                                  "evaluated_tree": h(f"tree-{run}")[:40] if oracle is not None else None,
+                                  "run_ref": f"synthetic/{run}-oracle.log" if oracle is not None else None}},
+        "caps": {"max_total_tokens": 200000, "max_wall_seconds": 3600, "max_cost": 5.0},
         "retries": {"builder_rework": 1 if status == "rejected" else 0, "reviewer_retry": 0,
                     "infrastructure_retry": 1 if status == "provider_unavailable" else 0},
         "human_interventions": [{"kind": "approval", "role": "cto", "at": "2026-01-01T00:10:00Z", "minutes": 2}],
@@ -75,6 +81,26 @@ def synthetic_records() -> list[dict]:
     ]
 
 
+def invalid_variants() -> list[tuple[str, dict | list]]:
+    """(rule each variant must trip, the broken record or record list). Built from valid records."""
+    import copy
+    base = synthetic_records()
+    def edit(index, change):
+        r = copy.deepcopy(base[index]); change(r); return r
+    return [
+        ("accepted-needs-independent-oracle", edit(0, lambda r: r["acceptance"]["oracle"].update(kind="product_checks"))),
+        ("accepted-needs-independent-oracle", edit(0, lambda r: r["acceptance"].update(checks=[]))),
+        ("all-passed-consistent", edit(2, lambda r: r["acceptance"].update(all_passed=True))),
+        ("end-after-start", edit(0, lambda r: r.update(ended_at="2025-12-31T23:00:00Z"))),
+        ("incomplete-has-no-end", edit(4, lambda r: r.update(ended_at=None))),
+        ("unknown-cost-is-null", edit(9, lambda r: r["cost"].update(amount=0))),
+        ("known-cost-complete", edit(0, lambda r: r["cost"].update(currency=None))),
+        ("caps-enforced", edit(0, lambda r: r["usage"].update(input_tokens=250000))),
+        ("oracle-references", edit(0, lambda r: r["acceptance"]["oracle"].update(run_ref=None))),
+        ("unique-run-id", [base[0], copy.deepcopy(base[0])]),
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", required=True)
@@ -86,10 +112,18 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "records.jsonl").write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in records), encoding="utf-8")
     (out / "validation.json").write_text(json.dumps(errors, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    semantics = check_semantics(records)
+    (out / "semantics.json").write_text(json.dumps(semantics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    variants = []
+    for rule, broken in invalid_variants():
+        found = check_semantics(broken if isinstance(broken, list) else [broken])
+        variants.append({"expected_rule": rule, "reported_rules": sorted({i["rule"] for i in found}),
+                         "caught": any(i["rule"] == rule for i in found)})
+    (out / "invalid-variants.json").write_text(json.dumps(variants, indent=2) + "\n", encoding="utf-8")
     (out / "summary.json").write_text(json.dumps(summarize_records(records), indent=2, sort_keys=True) + "\n",
                                       encoding="utf-8")
     print(out)
-    return 0 if not any(errors.values()) else 1
+    return 0 if not any(errors.values()) and not semantics and all(v["caught"] for v in variants) else 1
 
 
 if __name__ == "__main__":

@@ -117,7 +117,9 @@ def test_dry_run_summary_propagates_unknowns_and_zero_acceptance():
     assert sa['total_cost'] == 3.0                                        # failed and timed-out runs still cost
     assert sa['cost_per_accepted_run'] is None                            # zero accepted: undefined
     assert sa['terminal_statuses'] == {'failed': 1, 'provider_unavailable': 1, 'rejected': 3, 'timeout': 1}
-    assert sa['release_reliability'] == 0.0 and ma['release_reliability'] == 1.0
+    assert sa['conditional_release_rate'] == 0.0 and ma['conditional_release_rate'] == 1.0   # among runs reaching release
+    assert ma['release_and_oracle_success_rate'] == 4 / 6 and sa['release_and_oracle_success_rate'] == 0.0   # over all runs
+    assert (ma['runs_reaching_release_gate'], sa['runs_reaching_release_gate']) == (4, 2)
     assert [p['difference'] for p in summary['task_paired']] == [1.0, 0.5, 0.5]
     assert summary['paired_summary'] == {'tasks': 3, 'median_difference': 0.5, 'min_difference': 0.5,
                                          'max_difference': 1.0}
@@ -133,5 +135,26 @@ def test_cost_per_accepted_run_when_everything_is_known():
 def test_dry_run_script_is_deterministic(tmp_path):
     module = _dry_run()
     assert module.main(['--out', str(tmp_path / 'a')]) == 0 and module.main(['--out', str(tmp_path / 'b')]) == 0
-    for name in ('records.jsonl', 'validation.json', 'summary.json'):
+    for name in ('records.jsonl', 'validation.json', 'summary.json', 'semantics.json', 'invalid-variants.json'):
         assert (tmp_path / 'a' / name).read_bytes() == (tmp_path / 'b' / name).read_bytes()
+
+
+def test_synthetic_records_are_semantically_consistent():
+    from vittics_builder.benchmarks import check_semantics
+    assert check_semantics(_dry_run().synthetic_records()) == []
+
+
+def test_every_deliberately_broken_record_trips_its_rule():
+    from vittics_builder.benchmarks import check_semantics
+    for rule, broken in _dry_run().invalid_variants():
+        found = check_semantics(broken if isinstance(broken, list) else [broken])
+        assert rule in {i['rule'] for i in found}, rule
+
+
+def test_status_alone_never_counts_as_accepted():
+    """A record that says accepted but whose oracle is the product's own checks is not counted."""
+    records = _dry_run().synthetic_records()
+    claimed = copy.deepcopy(records[0])
+    claimed['acceptance']['oracle']['kind'] = 'product_checks'
+    s = summarize_records([claimed])['by_condition']['multi_agent']
+    assert s['accepted_runs'] == 0 and s['cost_per_accepted_run'] is None
