@@ -77,6 +77,50 @@ def test_a_recommendation_not_to_build_is_left_to_the_ceo(co, monkeypatch):
     assert co.db.one("SELECT 1 FROM events WHERE kind='autopilot' AND message LIKE 'Left for you:%not recommend%'")
 
 
+def test_autopilot_only_decides_for_whoever_chose_it(co):
+    """Audit SEC-04: the CTO choosing a level must not approve the CEO's requirements, and the reverse."""
+    p = co.pipeline.create_project("Notes", "A small notes app.")
+    co.pipeline.autopilot.set(p["id"], "final", "Lucky", roles=("cto",))
+    assert co.pipeline.advance(p["id"])["stage"] == "prd_approval"            # the CEO's gate waits
+    assert gates(co, p["id"]) == [("prd", "pending", None)]
+    assert co.db.one("SELECT 1 FROM events WHERE kind='autopilot' AND message LIKE 'Left for the CEO:%'")
+    decide_next(co, "ceo")                                                     # the CEO approves by hand ...
+    assert co.pipeline.project(p["id"])["stage"] == "signoff"                  # ... the CTO's gates were automatic
+    assert [(k, by) for k, s, by in gates(co, p["id"]) if k in ("architecture", "release")] == [
+        ("architecture", "Autopilot for Lucky"), ("release", "Autopilot for Lucky")]
+
+
+def test_who_autopilot_covers(co):
+    p = co.pipeline.create_project("Notes", "A small notes app.")
+    ap = co.pipeline.autopilot
+    ap.set(p["id"], "key", "Niki", roles=("ceo",))
+    assert ap.roles(p["id"]) == {"ceo"}
+    ap.set(p["id"], "key", "Lucky", roles=("cto",))
+    assert ap.roles(p["id"]) == {"ceo", "cto"}                              # same level: the CTO joins
+    ap.set(p["id"], "final", "Lucky", roles=("cto",))
+    assert ap.roles(p["id"]) == {"cto"}                                     # a new level starts over
+    ap.set(p["id"], "off", "Niki", roles=("ceo",))
+    assert (ap.level(p["id"]), ap.roles(p["id"])) == ("off", set())          # either person can turn it off
+    ap.set(p["id"], "key", "Niki")
+    assert ap.roles(p["id"]) == {"ceo", "cto"}                              # command line: one person is both
+    with pytest.raises(ValueError):
+        ap.set(p["id"], "key", "Niki", roles=("cfo",))
+
+
+def test_desktop_and_dashboard_delegate_differently(co):
+    from fastapi.testclient import TestClient
+    from vittics_builder.server import create_app
+    p = co.pipeline.create_project("Notes", "A small notes app.")
+    tokens = {"ceo": "ceo-token", "cto": "cto-token"}
+    co.pipeline.pause(p["id"], "Niki")                                         # keep background work out of it
+    two = TestClient(create_app(co, tokens))
+    assert two.post(f"/api/projects/{p['id']}/autopilot", json={"level": "key"},
+                    headers={"X-Token": "cto-token"}).json()["autopilot_roles"] == "cto"
+    one = TestClient(create_app(co, tokens, desktop=True))                     # one person is CEO and CTO
+    assert one.post(f"/api/projects/{p['id']}/autopilot", json={"level": "final"},
+                    headers={"X-Token": "cto-token"}).json()["autopilot_roles"] == "ceo,cto"
+
+
 def test_unknown_levels_are_refused(co):
     p = co.pipeline.create_project("Notes", "A small notes app.")
     with pytest.raises(ValueError):
@@ -209,13 +253,20 @@ def test_one_sentence_from_the_dashboard(co):
     assert client.post("/api/build", json={"brief": "A todo list app for teams", "autopilot": "yolo"},
                        headers=ceo).status_code == 400
     p = client.post("/api/build", json={"brief": "A todo list app for teams", "autopilot": "final"}, headers=ceo).json()
-    assert p["name"] == "Todo List App" and p["autopilot"] == "final"
-    deadline = time.time() + 180                                           # it works in the background;
-    while time.time() < deadline:                                          # Windows CI is much slower
-        if co.pipeline.project(p["id"])["stage"] == "signoff":
-            break
-        time.sleep(0.5)
-    assert co.pipeline.project(p["id"])["stage"] == "signoff"
+    assert p["name"] == "Todo List App" and p["autopilot"] == "final" and p["autopilot_roles"] == "ceo"
+
+    def reach(stage):
+        deadline = time.time() + 180                                       # it works in the background;
+        while time.time() < deadline:                                      # Windows CI is much slower
+            if co.pipeline.project(p["id"])["stage"] == stage and not co.pipeline.running(p["id"]):
+                break
+            time.sleep(0.5)
+        assert co.pipeline.project(p["id"])["stage"] == stage
+    reach("idea_review")                                                   # the CEO cannot decide for the CTO
+    assert co.db.one("SELECT 1 FROM events WHERE kind='autopilot' AND message LIKE 'Left for the CTO:%'")
+    joined = client.post(f"/api/projects/{p['id']}/autopilot", json={"level": "final"}, headers={"X-Token": "cto-token"})
+    assert joined.json()["autopilot_roles"] == "ceo,cto"                   # the CTO opts in to the same level
+    reach("signoff")
     state = client.get("/api/state", headers=ceo).json()
     assert state["autopilot_levels"]["key"] == "Key decisions"
     assert client.post(f"/api/projects/{p['id']}/autopilot", json={"level": "off"}, headers=ceo).json()["autopilot"] == "off"

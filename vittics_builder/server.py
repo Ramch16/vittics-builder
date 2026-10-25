@@ -189,6 +189,10 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         except (OrgError, PipelineError, TicketError, ChatError, FeedbackError, ToolError, ValueError, KeyError, TypeError) as exc:
             raise HTTPException(400, str(exc))
 
+    def delegable(role: str) -> tuple[str, ...]:
+        """Whose gates this person may hand to autopilot: their own; in the desktop app one person is both."""
+        return ("ceo", "cto") if desktop else (role,)
+
     def managed(role: str, ref: int) -> dict:
         agent = guard(lambda: co.org.agent(ref))
         if not co.can_manage(role, agent):
@@ -494,13 +498,13 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         project = guard(lambda: co.pipeline.create_project(body.name.strip() or name_from(brief), brief, by=who,
                                                            idea=body.size != "small", budget=body.budget,
                                                            size=body.size))
-        co.pipeline.autopilot.set(project["id"], body.autopilot, who)
+        co.pipeline.autopilot.set(project["id"], body.autopilot, who, roles=delegable(role))
         run_in_background(project["id"])
         return co.pipeline.project(project["id"])
 
     @app.post("/api/projects/{pid}/autopilot")
     def set_autopilot(pid: int, data: dict, role: str = Depends(auth)) -> dict:
-        guard(lambda: co.pipeline.autopilot.set(pid, str(data.get("level", "")), co.s.human(role)))
+        guard(lambda: co.pipeline.autopilot.set(pid, str(data.get("level", "")), co.s.human(role), roles=delegable(role)))
         run_in_background(pid)                       # it may decide a gate that is waiting now
         return co.pipeline.project(pid)
 
