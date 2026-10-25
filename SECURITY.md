@@ -5,7 +5,10 @@ privately to the maintainer (open a GitHub security advisory on the repository) 
 public issue.
 
 What Vittics Builder protects:
-- Agents' commands run without your API keys or tokens in their environment.
+- Agents' commands run without your API keys or tokens in their environment. Variables are matched by
+  name (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`), so a secret inside another variable, such as a
+  password in `DATABASE_URL`, is not removed. CLI engines get the same treatment, except for the login
+  each one signs in with (its `env_keep`, e.g. `OPENAI_API_KEY` for Codex).
 - File tools cannot leave the project workspace; a deny list blocks privilege escalation,
   deleting outside the workspace, piping downloads into a shell and `git push`.
 - With `sandbox.mode: docker`, agents' commands run in a container (no network unless allowed).

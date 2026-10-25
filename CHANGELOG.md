@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+- **CLI engines no longer inherit your secrets.** Claude Code, Codex and the other CLIs used to receive the
+  whole server environment except `ANTHROPIC_API_KEY`, including the CEO and CTO dashboard tokens and other
+  providers' keys. They now get the same scrubbed environment as agents' commands, plus only the login
+  variables each one signs in with (`env_keep`). A custom engine under `engines:` that needs a key must list
+  it in `env_keep`.
+
 ## 0.25.0 — 2026-10-12
 - Keep planning proposals in backlog instead of scheduling duplicate implementation work.
 - Share recorded approvals with project workers so stale file wording does not override decisions.
