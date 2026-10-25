@@ -391,6 +391,8 @@ class DB:
                              ("kind", "TEXT NOT NULL DEFAULT 'product'"), ("source", "TEXT NOT NULL DEFAULT ''"),
                              ("base_branch", "TEXT NOT NULL DEFAULT ''"), ("branch", "TEXT NOT NULL DEFAULT ''"),
                              ("checks", "TEXT NOT NULL DEFAULT '[]'"), ("autopilot", "TEXT NOT NULL DEFAULT 'off'"),
+                             # 0.27: whose gates the autopilot level covers. Existing projects keep both.
+                             ("autopilot_roles", "TEXT NOT NULL DEFAULT 'ceo,cto'"),
                              ("size", "TEXT NOT NULL DEFAULT 'standard'"),
                              ("repair_starts", "INTEGER NOT NULL DEFAULT 0")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions

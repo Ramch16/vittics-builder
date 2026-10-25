@@ -6,6 +6,11 @@
   final  Final sign-off only. The idea is decided as the assessment recommends (when it recommends
          building) and the plan is approved too; you sign off the release.
 
+Each person delegates only their own decisions. A level covers the gates of the people who chose it: when
+the CEO picks "key", the CEO's gates are automatic and the CTO's still wait until the CTO picks the same
+level too (and the reverse). Picking a different level starts over with just that person; "off" turns it off
+for both. In the desktop app and on the command line one person acts as both, so a level covers both.
+
 Only these gates are ever automatic, and only when their conditions hold. Everything else always waits
 for a person: the final sign-off, failures (release blocked, escalations, failed deployments), changed
 acceptance checks, budgets, hiring, deployments, strategies and board reviews. A release review is only
@@ -16,6 +21,8 @@ from __future__ import annotations
 import json
 
 LEVELS = {"off": "Step by step", "key": "Key decisions", "final": "Final sign-off only"}
+ROLES = ("ceo", "cto")
+TITLES = {"ceo": "CEO", "cto": "CTO"}
 AUTO = {"key": {"feasibility", "prd", "architecture", "release"},
         "final": {"feasibility", "idea_decision", "plan", "prd", "architecture", "release"}}
 CHOICE = {"build_internal": "internal", "build_to_sell": "commercial"}
@@ -48,12 +55,31 @@ class Autopilot:
         row = self.db.one("SELECT autopilot FROM projects WHERE id=?", pid)
         return row["autopilot"] if row and row["autopilot"] in LEVELS else "off"
 
-    def set(self, pid: int, level: str, by: str) -> None:
+    def roles(self, pid: int) -> set[str]:
+        """Whose decisions the current level may make: the people who chose it."""
+        row = self.db.one("SELECT autopilot_roles FROM projects WHERE id=?", pid)
+        return {r for r in (row["autopilot_roles"] if row else "").split(",") if r in ROLES}
+
+    def set(self, pid: int, level: str, by: str, roles=ROLES) -> None:
+        """`roles`: whose gates `by` may hand to autopilot. The dashboard passes only the signed-in person's role;
+        the desktop app and the command line, where one person is both, pass both."""
         if level not in LEVELS:
             raise ValueError(f"Autopilot is one of: {', '.join(LEVELS)}.")
+        roles = set(roles)
+        if not roles or roles - set(ROLES):
+            raise ValueError("Autopilot is chosen by the CEO, the CTO or both.")
         self.pipeline.project(pid)
-        self.db.run("UPDATE projects SET autopilot=? WHERE id=?", level, pid)
-        self.db.log("autopilot", f"{by} set autopilot to {LEVELS[level]}.", pid, actor=by)
+        if level == "off":
+            covered: set[str] = set()
+        elif level == self.level(pid):
+            covered = self.roles(pid) | roles           # the other person joins the level already chosen
+        else:
+            covered = roles                             # a new level starts with whoever chose it
+        self.db.run("UPDATE projects SET autopilot=?, autopilot_roles=? WHERE id=?",
+                    level, ",".join(r for r in ROLES if r in covered), pid)
+        whose = "" if level == "off" or covered == set(ROLES) else \
+            f" for the {TITLES[next(iter(covered))]}'s decisions only"
+        self.db.log("autopilot", f"{by} set autopilot to {LEVELS[level]}{whose}.", pid, actor=by)
 
     def _verdict(self, approval: dict) -> tuple[bool, str, str]:
         """(may decide, choice, reason) for one pending approval."""
@@ -80,8 +106,15 @@ class Autopilot:
         allowed = AUTO.get(self.level(pid), set())
         if not allowed:
             return False
+        covered = self.roles(pid)
         for approval in self.db.all("SELECT * FROM approvals WHERE project_id=? AND status='pending' ORDER BY id", pid):
             if approval["kind"] not in allowed:
+                continue
+            if approval["required_role"] not in covered:     # never decide for someone who has not opted in
+                who = TITLES[approval["required_role"]]
+                note = f"Left for the {who}: {approval['title']} (autopilot covers only the decisions of whoever chose it)."
+                if not self.db.one("SELECT 1 FROM events WHERE project_id=? AND kind='autopilot' AND message=?", pid, note):
+                    self.db.log("autopilot", note, pid, actor="Autopilot")
                 continue
             ok, choice, reason = self._verdict(approval)
             if not ok:

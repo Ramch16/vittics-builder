@@ -442,6 +442,13 @@ vittics-builder build "A customer support app with login, a database and Stripe 
 | `key`, key decisions (default) | the idea, the plan, the final sign-off | technical sign-off, requirements, design, the release review |
 | `final`, final sign-off only | the final sign-off | also the idea (when the assessment recommends building) and the plan |
 
+**Each person delegates only their own decisions.** On a two-person dashboard, the level you choose covers
+your gates; the other person's gates wait until they choose the same level too (**Add my decisions** on the
+project page). For example, when the CEO builds with `key`, requirements are automatic but the technical
+sign-off, design and release review wait for the CTO to opt in. In the desktop app and on the command line
+one person acts as both, so a level covers both. Choosing a different level starts over with just you;
+`off` turns it off for both.
+
 **Size.** Choose **Small** for something like a calculator, a form or a single page (`--size small`): it
 skips the idea assessment, keeps the requirements to at most 8 acceptance criteria, has one reviewer per
 ticket, sends a ticket to the CTO after one repair attempt instead of two, and has no audits (release QA and

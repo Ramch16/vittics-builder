@@ -953,6 +953,13 @@ function renderProject() {
           <label class="row" style="gap:.4rem;align-items:center;margin-bottom:.5rem">Autopilot
             <select data-autopilot="${p.id}" style="width:auto">${Object.entries(state.autopilot_levels || {}).map(([k, v]) =>
               `<option value="${k}" ${p.autopilot === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
+          ${(() => {          // each person delegates only their own gates; one person is both in the desktop app
+            const covers = (p.autopilot_roles || "").split(",").filter(Boolean);
+            if (p.autopilot === "off" || state.desktop || covers.length === 2) return "";
+            const who = covers.map(r => r.toUpperCase()).join(" and ") || "nobody";
+            return `<p class="muted" style="margin:.2rem 0">Covers the ${esc(who)}'s decisions only.${covers.includes(me) ? "" :
+              ` <button class="quiet" data-autopilot-join="${p.id}" data-level="${esc(p.autopilot)}">Add my decisions</button>`}</p>`;
+          })()}
           ${p.preview && p.preview.status === "running"
             ? `<p style="margin:.2rem 0">Preview of <b>v${p.preview.version}</b> running: <a href="${esc(p.preview.url)}" target="_blank" rel="noopener">${esc(p.preview.url)}</a>
                <button class="quiet" data-preview="${p.id}" data-action="stop">Stop</button></p>`
@@ -1410,6 +1417,10 @@ $("build-form").onsubmit = e => {
 document.addEventListener("change", e => {
   const s = e.target.closest("[data-autopilot]");
   if (s) act(async () => { await api(`/api/projects/${s.dataset.autopilot}/autopilot`, { level: s.value }); });
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-autopilot-join]");
+  if (b) act(async () => { await api(`/api/projects/${b.dataset.autopilotJoin}/autopilot`, { level: b.dataset.level }); });
 });
 $("switch-role").onclick = () => act(async () => {
   const r = await api("/api/desktop/switch", {});

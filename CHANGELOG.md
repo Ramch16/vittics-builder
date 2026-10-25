@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+- **Autopilot decides only for whoever chose it.** Either dashboard token could set any autopilot level, so
+  the CTO could have the CEO's requirements, idea and plan approved automatically (and the reverse). A level
+  now covers the gates of the people who chose it; the other person opts in by choosing the same level
+  (**Add my decisions**). The desktop app and the command line, where one person is both, are unchanged.
+  Existing projects keep their current level for both people.
+
 ## 0.25.0 — 2026-10-12
 - Keep planning proposals in backlog instead of scheduling duplicate implementation work.
 - Share recorded approvals with project workers so stale file wording does not override decisions.
