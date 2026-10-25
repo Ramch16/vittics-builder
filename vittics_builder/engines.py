@@ -6,7 +6,8 @@ reads, edits and runs commands with its own tools. Vittics Builder actions (plan
 assessments) come back in a fenced ```vittics-builder JSON block at the end of the reply.
 
 CLI engines run on this machine under the CLI's own permission rules, not in Vittics Builder's Docker
-sandbox. Read-only roles get read-only tools.
+sandbox. Read-only roles get read-only tools. A CLI does not inherit our secrets (API keys, the CEO and CTO
+dashboard tokens, cloud credentials): only the ones it signs in with, listed in its `env_keep`.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ import os
 import re
 import subprocess
 import tempfile
+from fnmatch import fnmatchcase
 
 # Verified against Claude Code 2.1 (`claude --help`): -p reads the prompt from stdin.
 BUILTIN_ENGINES: dict[str, dict] = {
@@ -26,22 +28,28 @@ BUILTIN_ENGINES: dict[str, dict] = {
     "codex": {"command": ["codex", "exec", "--ephemeral", "--skip-git-repo-check"], "model_args": ["-m", "{model}"],
               "level_args": {"read": ["--sandbox", "read-only", "-"], "write": ["--sandbox", "workspace-write", "-"]},
               "prompt": "stdin", "system": "prompt", "output": "text", "subscription": True, "verified": True,
+              "env_keep": ["OPENAI_API_KEY", "CODEX_API_KEY"],
               "usage_pattern": r"tokens used\s+([\d,]+)"},     # total tokens, printed on stderr
     "gemini": {"command": ["gemini", "-p", "{prompt}"], "model_args": ["-m", "{model}"],
                "level_args": {"read": [], "write": ["--yolo"]},
-               "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+               "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False,
+               "env_keep": ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"]},
     "copilot": {"command": ["copilot", "-p", "{prompt}"], "model_args": ["--model", "{model}"],
                 "level_args": {"read": [], "write": ["--allow-all-tools"]},
-                "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+                "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False,
+                "env_keep": ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]},
     "cursor": {"command": ["cursor-agent", "-p", "{prompt}", "--output-format", "text"], "model_args": ["--model", "{model}"],
                "level_args": {"read": [], "write": ["--force"]},
-               "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+               "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False,
+               "env_keep": ["CURSOR_API_KEY"]},
     "opencode": {"command": ["opencode", "run", "{prompt}"], "model_args": ["--model", "{model}"],
                  "level_args": {"read": [], "write": ["--dangerously-skip-permissions"]},
-                 "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+                 "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False,
+                 "env_keep": ["*_API_KEY"]},
     "qwen": {"command": ["qwen", "-p", "{prompt}"], "model_args": ["-m", "{model}"],
              "level_args": {"read": [], "write": ["--yolo"]},
-             "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False},
+             "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False,
+             "env_keep": ["DASHSCOPE_API_KEY", "OPENAI_API_KEY"]},
     "claude-code": {
         "command": ["claude", "-p", "--output-format", "json", "--no-session-persistence",
                     "--permission-mode", "acceptEdits", "--append-system-prompt", "{system}"],
@@ -52,6 +60,7 @@ BUILTIN_ENGINES: dict[str, dict] = {
         "prompt": "stdin",
         "output": "claude-json",
         "subscription": True,       # drop ANTHROPIC_API_KEY so the CLI bills its own login, not the API key
+        "env_keep": ["CLAUDE_CODE_OAUTH_TOKEN"],     # a subscription login from `claude setup-token`
         # A run ends when the agent replies, so a background command's result would never reach it.
         "env": {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"},
         "verified": True,           # run against Vittics Builder's tests and a real Claude Code 2.1 install
@@ -146,6 +155,21 @@ def actions_to_calls(data: dict) -> list[tuple[str, dict]]:
     return calls
 
 
+def engine_env(engine: dict, base=None) -> dict[str, str]:
+    """The environment a CLI engine runs with: ours, minus every secret-looking variable (the same names agents'
+    commands never see: API keys, the CEO and CTO tokens, cloud credentials) except those the engine signs in
+    with, `env_keep` (exact names or shell-style patterns such as "*_API_KEY"). A subscription engine never gets
+    ANTHROPIC_API_KEY, even if kept, so it bills its own login. The engine's own `env` is applied last."""
+    from .tools import SECRET_ENV
+    keep = [str(p) for p in engine.get("env_keep") or []]
+    env = {k: v for k, v in (os.environ if base is None else base).items()
+           if not SECRET_ENV.search(k) or any(fnmatchcase(k, p) for p in keep)}
+    if engine.get("subscription"):
+        env.pop("ANTHROPIC_API_KEY", None)
+    env.update(engine.get("env") or {})
+    return env
+
+
 def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: str, write: bool, run: bool,
             timeout: int) -> dict:
     """Run one CLI turn. Reading is always allowed; editing files and running commands only when granted."""
@@ -170,10 +194,7 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
         argv += engine["allow_args"] + allowed
     if engine.get("deny_args") and denied:
         argv += engine["deny_args"] + denied
-    env = dict(os.environ)
-    if engine.get("subscription"):
-        env.pop("ANTHROPIC_API_KEY", None)
-    env.update(engine.get("env") or {})
+    env = engine_env(engine)
     workdir = cwd or tempfile.mkdtemp(prefix="vittics-chat-")
     from .platforms import UnsafeCommand, safe_argv
     try:
