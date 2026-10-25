@@ -1,0 +1,16 @@
+...................................................................ss..s [ 17%]
+.....s.................................................................. [ 35%]
+......................s........s.ss..................................... [ 52%]
+........................................................................ [ 70%]
+.......................................xxxxx............................ [ 87%]
+.........................................x.x..xxxxx                      [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_company_os.py:201: Chromium not installed
+SKIPPED [1] tests/test_company_os.py:212: Chromium not installed
+SKIPPED [1] tests/test_company_os.py:242: Chromium not installed
+SKIPPED [1] tests/test_dashboard_dialogs.py:22: Optional Playwright/Chromium not installed
+SKIPPED [1] tests/test_integrations.py:44: Optional Playwright/Chromium not installed
+SKIPPED [1] tests/test_integrations.py:99: Optional MCP SDK not installed
+SKIPPED [1] tests/test_integrations.py:148: Optional Playwright/Chromium not installed
+SKIPPED [1] tests/test_integrations.py:197: Optional Playwright/Chromium not installed
+391 passed, 8 skipped, 12 xfailed in 333.52s (0:05:33)

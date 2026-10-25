@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "outputs": {
+    "synthetic-dry-run/records.jsonl": "0e7238ccefded60dc1e8a3a78a0543448a19d220ec30b183a1bdaabd40717578",
+    "synthetic-dry-run/summary.json": "e2990900dbd13686e4186788344e3fae24c80d373130c20d1d8dd6b61813a8a8",
+    "synthetic-dry-run/validation.json": "7185f6328231fb8327413d0b02e7ab900ca64f82f4644c2d0654162ea81ff0dc",
+    "synthetic-trace.json": "277ae0fe4eedcc8fbc69dcaf136d74995d9cfa2b0111c6787b60be3b21a987e5"
+  },
+  "capture_id": "20261025T174908Z-abda17a",
+  "data_kind": "observed",
+  "label": "result: research/week1-evidence commit, clean tree",
+  "captured_at": "2026-10-25T17:55:18Z",
+  "provider": "mock (VITTICS_PROVIDER=mock; secret-named variables removed)",
+  "source": {
+    "remote": "https://github.com/Ramch16/vittics-builder",
+    "head": "abda17aff2a292cc96a244747997751771986ae9",
+    "tree": "5f40bbc88bb36cae0c8ccdeccc77af51f351c657",
+    "branch": "research/week1-evidence",
+    "dirty_paths": [],
+    "dirty": false,
+    "audited_head": "89694d5142ddf2fe5055643c306b683c67665026",
+    "audited_head_matches": false,
+    "changed_since_audit": [
+      " 30 files changed, 1826 insertions(+), 25 deletions(-)"
+    ]
+  },
+  "environment": {
+    "os": "Linux-6.18.44-fc-v153-x86_64-with-glibc2.39",
+    "system": "Linux",
+    "machine": "x86_64",
+    "versions": {
+      "git": "git version 2.43.0",
+      "node": "v22.23.4"
+    }
+  },
+  "steps": [
+    {
+      "name": "suite",
+      "command": "/tmp/claude-0/vb-venv/bin/python -m pytest -q -rs -p no:cacheprovider",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T17:49:08Z",
+      "ended_at": "2026-10-25T17:54:43Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {
+        "passed": 391,
+        "skipped": 8,
+        "xfailed": 12
+      },
+      "log": "suite.log",
+      "log_sha256": "e54ce1eb117c44d2da2ad44abdc13e3b9e37f8890b9a70e925985875c26de93c"
+    },
+    {
+      "name": "browser-subset",
+      "command": "/tmp/claude-0/vb-browser-ci/bin/python -m pytest tests/test_dashboard_dialogs.py tests/test_integrations.py tests/test_company_os.py -q -rs -p no:cacheprovider",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "1.63.0",
+          "mcp": "not installed"
+        },
+        "chromium": "153.0.8010.12"
+      },
+      "started_at": "2026-10-25T17:54:43Z",
+      "ended_at": "2026-10-25T17:55:14Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {
+        "passed": 38,
+        "skipped": 1
+      },
+      "log": "browser-subset.log",
+      "log_sha256": "887dcb52c4a1feb4709e561a48e2627faefe9a3937bcba318ac300c9b1be11c2"
+    },
+    {
+      "name": "synthetic-trace",
+      "command": "/tmp/claude-0/vb-venv/bin/python scripts/trace_synthetic_brief.py --out evidence/week1/20261025T174908Z-abda17a/synthetic-trace.json",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T17:55:14Z",
+      "ended_at": "2026-10-25T17:55:17Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "synthetic-trace.log",
+      "log_sha256": "b443bd77979e94497f7d57321ee516f97c136d5fa68cae2ce5f36cbfae599690"
+    },
+    {
+      "name": "synthetic-dry-run",
+      "command": "/tmp/claude-0/vb-venv/bin/python scripts/synthetic_dry_run.py --out evidence/week1/20261025T174908Z-abda17a/synthetic-dry-run",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T17:55:17Z",
+      "ended_at": "2026-10-25T17:55:18Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "synthetic-dry-run.log",
+      "log_sha256": "48827e7067bf7214eb5cf51e31fede8820bd151170a27a74d48fe6f539fc4505"
+    }
+  ],
+  "limitations": [
+    "Counts are parsed from each log's last pytest summary line; the log is authoritative.",
+    "A passing mock run exercises orchestration, not AI coding quality."
+  ]
+}
