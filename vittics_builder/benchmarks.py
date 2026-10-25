@@ -95,3 +95,124 @@ def _snapshot(db, project_id, cutoff):
                     'Tracker completion does not establish independent acceptance or release success.']}
     finally:
         db.conn.execute('RELEASE benchmark_snapshot')
+
+
+# ---- run records (docs/research/run-record.schema.json; DRAFT, not approved for experiments) ----------------
+SCHEMA_PATH = 'docs/research/run-record.schema.json'
+_TYPES = {'object': dict, 'array': list, 'string': str, 'boolean': bool, 'null': type(None)}
+
+
+def _is(value, kind):
+    if kind == 'integer':
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind == 'number':
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, _TYPES[kind])
+
+
+def validate_record(record, schema, path='$'):
+    """Errors (a list of strings, empty when valid) for `record` against the keywords the run-record schema
+    uses: type, required, properties, additionalProperties, items, enum, const, minimum, minLength, pattern
+    and format (date-time, date). Not a general JSON Schema validator; anything else raises."""
+    import re as _re
+    known = {'$schema', '$id', 'title', 'description', 'type', 'required', 'properties', 'additionalProperties',
+             'items', 'enum', 'const', 'minimum', 'minLength', 'pattern', 'format'}
+    if set(schema) - known:
+        raise ValueError(f'{path}: unsupported schema keywords {sorted(set(schema) - known)}')
+    errors = []
+    if 'const' in schema and record != schema['const']:
+        return [f'{path}: must be {schema["const"]!r}']
+    if 'enum' in schema and record not in schema['enum']:
+        return [f'{path}: {record!r} is not one of {schema["enum"]}']
+    kinds = schema.get('type')
+    if kinds is not None:
+        kinds = [kinds] if isinstance(kinds, str) else kinds
+        if not any(_is(record, k) for k in kinds):
+            return [f'{path}: expected {"/".join(kinds)}, got {type(record).__name__}']
+    if record is None:
+        return errors
+    if isinstance(record, str):
+        if len(record) < schema.get('minLength', 0):
+            errors.append(f'{path}: too short')
+        if 'pattern' in schema and not _re.search(schema['pattern'], record):
+            errors.append(f'{path}: does not match {schema["pattern"]}')
+        fmt = schema.get('format')
+        try:
+            if fmt == 'date-time':
+                instant(record.replace('Z', '+00:00'))
+            elif fmt == 'date':
+                datetime.strptime(record, '%Y-%m-%d')
+        except ValueError:
+            errors.append(f'{path}: not a valid {fmt} with timezone')
+    if 'minimum' in schema and _is(record, 'number') and record < schema['minimum']:
+        errors.append(f'{path}: below {schema["minimum"]}')
+    if isinstance(record, dict):
+        for key in schema.get('required', []):
+            if key not in record:
+                errors.append(f'{path}: missing {key}')
+        props = schema.get('properties', {})
+        for key, value in record.items():
+            if key in props:
+                errors += validate_record(value, props[key], f'{path}.{key}')
+            elif schema.get('additionalProperties') is False:
+                errors.append(f'{path}: unexpected field {key}')
+    if isinstance(record, list) and 'items' in schema:
+        for i, item in enumerate(record):
+            errors += validate_record(item, schema['items'], f'{path}[{i}]')
+    return errors
+
+
+def _total(values):
+    """Sum, or None if any value is unknown: unknown is never treated as zero."""
+    values = list(values)
+    return None if any(v is None for v in values) else sum(values)
+
+
+def summarize_records(records):
+    """Per-condition and task-paired summaries of validated run records (benchmark-protocol-draft.md §8–9).
+    Failed and incomplete runs count everywhere, including cost. Cost per accepted run is None when no run was
+    accepted or any cost is unknown. The unit of comparison is the task: repeats are averaged within a task."""
+    data_kinds = sorted({r['data_kind'] for r in records})
+    by_condition = {}
+    for condition in sorted({r['condition'] for r in records}):
+        runs = [r for r in records if r['condition'] == condition]
+        accepted = sum(r['terminal_status'] == 'accepted' for r in runs)
+        reached = [r for r in runs if r['acceptance']['release_outcome'] in ('released', 'release_blocked')]
+        cost = _total(r['cost']['amount'] for r in runs)
+        by_condition[condition] = {
+            'runs': len(runs), 'tasks': len({r['task_id'] for r in runs}),
+            'accepted_runs': accepted, 'acceptance_rate': accepted / len(runs),
+            'release_reliability': (sum(r['acceptance']['release_outcome'] == 'released' for r in reached) / len(reached)
+                                    if reached else None),
+            'incomplete_runs': sum(r['ended_at'] is None for r in runs),
+            'terminal_statuses': {s: sum(r['terminal_status'] == s for r in runs)
+                                  for s in sorted({r['terminal_status'] for r in runs})},
+            'total_cost': cost, 'currencies': sorted({r['cost']['currency'] for r in runs if r['cost']['currency']}),
+            'unknown_cost_runs': sum(r['cost']['amount'] is None for r in runs),
+            'cost_per_accepted_run': cost / accepted if cost is not None and accepted else None,
+            'human_minutes': _total(i['minutes'] for r in runs for i in r['human_interventions']),
+            'input_tokens': _total(r['usage']['input_tokens'] for r in runs),
+            'output_tokens': _total(r['usage']['output_tokens'] for r in runs),
+        }
+    paired = []
+    for task in sorted({r['task_id'] for r in records}):
+        rates = {}
+        for condition in ('multi_agent', 'single_agent'):
+            runs = [r for r in records if r['task_id'] == task and r['condition'] == condition]
+            rates[condition] = (sum(r['terminal_status'] == 'accepted' for r in runs) / len(runs), len(runs)) if runs else None
+        if rates['multi_agent'] and rates['single_agent']:
+            paired.append({'task_id': task, 'multi_agent_rate': rates['multi_agent'][0],
+                           'single_agent_rate': rates['single_agent'][0],
+                           'repeats': {'multi_agent': rates['multi_agent'][1], 'single_agent': rates['single_agent'][1]},
+                           'difference': rates['multi_agent'][0] - rates['single_agent'][0]})
+    diffs = sorted(p['difference'] for p in paired)
+    mid = len(diffs) // 2
+    return {'schema_version': 1, 'data_kinds': data_kinds, 'by_condition': by_condition, 'task_paired': paired,
+            'paired_summary': {'tasks': len(diffs),
+                               'median_difference': (diffs[mid] if len(diffs) % 2 else (diffs[mid - 1] + diffs[mid]) / 2)
+                               if diffs else None,
+                               'min_difference': diffs[0] if diffs else None,
+                               'max_difference': diffs[-1] if diffs else None},
+            'limitations': ['Exploratory: no significance test; repeats are clustered by task.',
+                            'Synthetic or mock records say nothing about real performance.'
+                            if any(k != 'observed' for k in data_kinds) else 'Pilot sample; see the protocol.']}

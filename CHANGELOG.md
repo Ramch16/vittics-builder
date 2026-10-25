@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **Git works in agents' commands when the host sets git config through the environment.** The secret filter
+  removed `GIT_CONFIG_KEY_<n>` but kept `GIT_CONFIG_COUNT`, so every git command failed with "missing config key".
+  The `GIT_CONFIG_COUNT`/`KEY`/`VALUE` set is now removed together (values can hold credentials), for agents'
+  commands and CLI engines alike (`tools.scrub_env`).
+- **Benchmark run records (draft).** `benchmarks.validate_record` and `summarize_records` check records against
+  `docs/research/run-record.schema.json` and summarize them by condition and task; unknown values stay unknown.
+  The protocol is a draft, not approved for experiments.
 - **CLI engines no longer inherit your secrets.** Claude Code, Codex and the other CLIs used to receive the
   whole server environment except `ANTHROPIC_API_KEY`, including the CEO and CTO dashboard tokens and other
   providers' keys. They now get the same scrubbed environment as agents' commands, plus only the login
