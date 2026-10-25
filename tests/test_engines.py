@@ -171,3 +171,41 @@ def test_capacity_error_is_unavailable_even_after_partial_stdout(tmp_path, messa
     engine = {'command': [sys.executable, str(script)], 'output': 'text', 'prompt': 'stdin'}
     with pytest.raises(EngineUnavailable):
         run_cli(engine, system='', prompt='review', cwd=str(tmp_path), model='', write=False, run=False, timeout=10)
+
+
+ENV_DUMP = "import json, os; print(json.dumps(dict(os.environ)))"
+SECRETS = {"VITTICS_CEO_TOKEN": "fake-ceo", "VITTICS_CTO_TOKEN": "fake-cto", "OPENAI_API_KEY": "fake-openai",
+           "AWS_SECRET_ACCESS_KEY": "fake-aws", "ANTHROPIC_API_KEY": "fake-anthropic", "GH_TOKEN": "fake-gh"}
+
+
+def _env_seen_by(engine, monkeypatch):
+    from vittics_builder.engines import run_cli
+    for name, value in SECRETS.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("VITTICS_HARMLESS_SETTING", "kept")
+    engine = {**engine, "command": [sys.executable, "-c", ENV_DUMP], "level_args": {}, "model_args": [],
+              "output": "text", "usage_pattern": None}
+    out = run_cli(engine, system="s", prompt="p", cwd=None, model="", write=True, run=True, timeout=60)
+    return json.loads(out["text"])
+
+
+def test_cli_engines_do_not_inherit_the_dashboard_tokens_or_other_keys(monkeypatch):
+    """SEC-02: a builder on a CLI engine can run shell commands, so the CLI must not hold our secrets."""
+    seen = _env_seen_by(BUILTIN_ENGINES["claude-code"], monkeypatch)
+    assert not set(SECRETS) & set(seen)
+    assert seen["VITTICS_HARMLESS_SETTING"] == "kept"           # ordinary settings still pass
+    assert seen["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1"  # the engine's own env still applies
+    assert "PATH" in seen
+
+
+def test_each_cli_keeps_only_the_login_it_signs_in_with(monkeypatch):
+    seen = _env_seen_by(BUILTIN_ENGINES["codex"], monkeypatch)
+    assert seen["OPENAI_API_KEY"] == "fake-openai"
+    assert not {"VITTICS_CEO_TOKEN", "VITTICS_CTO_TOKEN", "AWS_SECRET_ACCESS_KEY", "GH_TOKEN"} & set(seen)
+
+
+def test_env_keep_patterns_never_return_the_api_key_to_a_subscription_engine():
+    from vittics_builder.engines import engine_env
+    env = engine_env({"subscription": True, "env_keep": ["*_API_KEY"]},
+                     {"ANTHROPIC_API_KEY": "a", "OPENAI_API_KEY": "o", "VITTICS_CEO_TOKEN": "t", "HOME": "/h"})
+    assert env == {"OPENAI_API_KEY": "o", "HOME": "/h"}

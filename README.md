@@ -263,6 +263,12 @@ are coarser than Claude Code's: read-only roles get the CLI's read-only or ask-f
 its edit mode. `vittics-builder engines` shows which are installed. Add or override any engine under
 `engines:` in `org.yaml`.
 
+A CLI does not inherit your secrets: API keys, the CEO and CTO tokens and other variables named like
+credentials are removed from its environment, except the ones it signs in with (`env_keep`: for example
+`OPENAI_API_KEY` for Codex, `GEMINI_API_KEY` for Gemini, `CLAUDE_CODE_OAUTH_TOKEN` for Claude Code). An
+engine you override or add under `engines:` gets no `env_keep` unless you list it, e.g.
+`env_keep: [MY_PROVIDER_API_KEY]` (shell-style patterns such as `"*_API_KEY"` work).
+
 The ChatGPT desktop app includes the Codex CLI. To put it on your PATH:
 `ln -s /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex ~/.local/bin/codex`
 (or `npm i -g @openai/codex`), then `codex login` if you are not signed in.

@@ -38,6 +38,7 @@ llm:
 #     command: [codex, exec, "{prompt}"]
 #     prompt: arg              # passed as an argument (claude-code reads it from stdin)
 #     output: text             # plain text reply; claude-code returns JSON with cost and usage
+#     env_keep: [OPENAI_API_KEY]   # secrets it may see (it signs in with them); all other keys and tokens are removed
 #   gemini:
 #     command: [gemini, -p, "{prompt}"]
 #     prompt: arg

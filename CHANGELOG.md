@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- **CLI engines no longer inherit your secrets.** Claude Code, Codex and the other CLIs used to receive the
+  whole server environment except `ANTHROPIC_API_KEY`, including the CEO and CTO dashboard tokens and other
+  providers' keys. They now get the same scrubbed environment as agents' commands, plus only the login
+  variables each one signs in with (`env_keep`). A custom engine under `engines:` that needs a key must list
+  it in `env_keep`.
 - **Autopilot decides only for whoever chose it.** Either dashboard token could set any autopilot level, so
   the CTO could have the CEO's requirements, idea and plan approved automatically (and the reverse). A level
   now covers the gates of the people who chose it; the other person opts in by choosing the same level
