@@ -1,0 +1,53 @@
+{
+  "task_id": "T06",
+  "checks": [
+    {
+      "id": "tests.test_public::test_v1_to_v3",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_unsupported",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_v2_with_connect_timeout_and_extra_keys",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_idempotent",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_input_not_mutated_including_nested",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_unsupported_versions[cfg0]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_unsupported_versions[cfg1]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_unsupported_versions[cfg2]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_unsupported_versions[cfg3]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_unsupported_versions[cfg4]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_v1_missing_keys_and_no_mutation_on_failure",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "rate(config):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/migrate.py:6: NotImplementedError\n_______________________ test_unsupported_versions[cfg1] ________________________\n\ncfg = {'version': True}\n\n    @pytest.mark.parametrize(\"cfg\", [{}, {\"version\": True}, {\"version\": 0}, {\"version\": 4}, {\"version\": \"1\"}])\n    def test_unsupported_versions(cfg):\n        with pytest.raises(UnsupportedVersion):\n>           migrate(cfg)\n\nhidden_oracle/test_hidden.py:28: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nconfig = {'version': True}\n\n    def migrate(config):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/migrate.py:6: NotImplementedError\n_______________________ test_unsupported_versions[cfg2] ________________________\n\ncfg = {'version': 0}\n\n    @pytest.mark.parametrize(\"cfg\", [{}, {\"version\": True}, {\"version\": 0}, {\"version\": 4}, {\"version\": \"1\"}])\n    def test_unsupported_versions(cfg):\n        with pytest.raises(UnsupportedVersion):\n>           migrate(cfg)\n\nhidden_oracle/test_hidden.py:28: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nconfig = {'version': 0}\n\n    def migrate(config):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/migrate.py:6: NotImplementedError\n_______________________ test_unsupported_versions[cfg3] ________________________\n\ncfg = {'version': 4}\n\n    @pytest.mark.parametrize(\"cfg\", [{}, {\"version\": True}, {\"version\": 0}, {\"version\": 4}, {\"version\": \"1\"}])\n    def test_unsupported_versions(cfg):\n        with pytest.raises(UnsupportedVersion):\n>           migrate(cfg)\n\nhidden_oracle/test_hidden.py:28: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nconfig = {'version': 4}\n\n    def migrate(config):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/migrate.py:6: NotImplementedError\n_______________________ test_unsupported_versions[cfg4] ________________________\n\ncfg = {'version': '1'}\n\n    @pytest.mark.parametrize(\"cfg\", [{}, {\"version\": True}, {\"version\": 0}, {\"version\": 4}, {\"version\": \"1\"}])\n    def test_unsupported_versions(cfg):\n        with pytest.raises(UnsupportedVersion):\n>           migrate(cfg)\n\nhidden_oracle/test_hidden.py:28: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nconfig = {'version': '1'}\n\n    def migrate(config):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/migrate.py:6: NotImplementedError\n_______________ test_v1_missing_keys_and_no_mutation_on_failure ________________\n\n    def test_v1_missing_keys_and_no_mutation_on_failure():\n        cfg = {\"version\": 1, \"db_host\": \"h\"}\n        with pytest.raises(ValueError):\n>           migrate(cfg)\n\nhidden_oracle/test_hidden.py:34: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nconfig = {'version': 1, 'db_host': 'h'}\n\n    def migrate(config):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/migrate.py:6: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_v1_to_v3 - NotImplementedError\nFAILED tests/test_public.py::test_unsupported - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_v2_with_connect_timeout_and_extra_keys\nFAILED hidden_oracle/test_hidden.py::test_idempotent - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_input_not_mutated_including_nested\nFAILED hidden_oracle/test_hidden.py::test_unsupported_versions[cfg0] - NotImp...\nFAILED hidden_oracle/test_hidden.py::test_unsupported_versions[cfg1] - NotImp...\nFAILED hidden_oracle/test_hidden.py::test_unsupported_versions[cfg2] - NotImp...\nFAILED hidden_oracle/test_hidden.py::test_unsupported_versions[cfg3] - NotImp...\nFAILED hidden_oracle/test_hidden.py::test_unsupported_versions[cfg4] - NotImp...\nFAILED hidden_oracle/test_hidden.py::test_v1_missing_keys_and_no_mutation_on_failure\n11 failed in 0.04s\n",
+  "evaluated_tree_sha256": "a0a353bd397c26ff23863f0c5a9354cb6caca1b1d07974bfd0e039223ffddd4e"
+}

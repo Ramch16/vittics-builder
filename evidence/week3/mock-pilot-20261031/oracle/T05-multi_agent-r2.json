@@ -1,0 +1,57 @@
+{
+  "task_id": "T05",
+  "checks": [
+    {
+      "id": "tests.test_public::test_utc_grouping",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_naive_rejected",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_offset_moves_day",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_boundaries",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_input_offsets_are_respected_and_refunds",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_offset[-721]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_offset[841]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_amount[1.5]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_amount[True]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_amount[3]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_garbage_timestamp_and_input_unchanged",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_half_hour_offset",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "___________________\n\namount = 1.5\n\n    @pytest.mark.parametrize(\"amount\", [1.5, True, \"3\"])\n    def test_bad_amount(amount):\n        with pytest.raises(ValueError):\n>           daily_totals([(\"2026-03-01T10:00:00+00:00\", amount)], 0)\n\nhidden_oracle/test_hidden.py:31: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nevents = [('2026-03-01T10:00:00+00:00', 1.5)], offset_minutes = 0\n\n    def daily_totals(events, offset_minutes):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/reports.py:2: NotImplementedError\n____________________________ test_bad_amount[True] _____________________________\n\namount = True\n\n    @pytest.mark.parametrize(\"amount\", [1.5, True, \"3\"])\n    def test_bad_amount(amount):\n        with pytest.raises(ValueError):\n>           daily_totals([(\"2026-03-01T10:00:00+00:00\", amount)], 0)\n\nhidden_oracle/test_hidden.py:31: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nevents = [('2026-03-01T10:00:00+00:00', True)], offset_minutes = 0\n\n    def daily_totals(events, offset_minutes):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/reports.py:2: NotImplementedError\n______________________________ test_bad_amount[3] ______________________________\n\namount = '3'\n\n    @pytest.mark.parametrize(\"amount\", [1.5, True, \"3\"])\n    def test_bad_amount(amount):\n        with pytest.raises(ValueError):\n>           daily_totals([(\"2026-03-01T10:00:00+00:00\", amount)], 0)\n\nhidden_oracle/test_hidden.py:31: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nevents = [('2026-03-01T10:00:00+00:00', '3')], offset_minutes = 0\n\n    def daily_totals(events, offset_minutes):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/reports.py:2: NotImplementedError\n__________________ test_garbage_timestamp_and_input_unchanged __________________\n\n    def test_garbage_timestamp_and_input_unchanged():\n        with pytest.raises(ValueError):\n>           daily_totals([(\"yesterday\", 1)], 0)\n\nhidden_oracle/test_hidden.py:36: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nevents = [('yesterday', 1)], offset_minutes = 0\n\n    def daily_totals(events, offset_minutes):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/reports.py:2: NotImplementedError\n____________________________ test_half_hour_offset _____________________________\n\n    def test_half_hour_offset():\n>       assert daily_totals([(\"2026-03-01T18:45:00+00:00\", 1)], 330) == {\"2026-03-02\": 1}\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:44: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nevents = [('2026-03-01T18:45:00+00:00', 1)], offset_minutes = 330\n\n    def daily_totals(events, offset_minutes):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/reports.py:2: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_utc_grouping - NotImplementedError\nFAILED tests/test_public.py::test_naive_rejected - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_offset_moves_day - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_boundaries - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_input_offsets_are_respected_and_refunds\nFAILED hidden_oracle/test_hidden.py::test_bad_offset[-721] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_offset[841] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_amount[1.5] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_amount[True] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_amount[3] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_garbage_timestamp_and_input_unchanged\nFAILED hidden_oracle/test_hidden.py::test_half_hour_offset - NotImplementedError\n12 failed in 0.04s\n",
+  "evaluated_tree_sha256": "65bb1cbd6109fbc6179d8120005b96150594cfe6b9f98bc6dcdc42ff57f14c60"
+}

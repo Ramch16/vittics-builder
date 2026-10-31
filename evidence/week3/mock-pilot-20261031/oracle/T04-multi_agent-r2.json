@@ -1,0 +1,49 @@
+{
+  "task_id": "T04",
+  "checks": [
+    {
+      "id": "tests.test_public::test_manager_approves",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_employee_cannot_approve",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_no_self_approval",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_decisions_are_final",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_amount[0]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_amount[-5]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_amount[10.5]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_amount[True]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_reason_required_and_unknowns",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_get_returns_copy",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "est_bad_amount[-5] ______________________________\n\namount = -5\n\n    @pytest.mark.parametrize(\"amount\", [0, -5, 10.5, True])\n    def test_bad_amount(amount):\n        with pytest.raises(ValueError):\n>           Workflow(ROLES).submit(\"eve\", amount)\n            ^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:31: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.expenses.Workflow object at 0x7f79ac9db410>\nroles = {'eve': 'employee', 'max': 'manager', 'mia': 'manager'}\n\n    def __init__(self, roles):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/expenses.py:7: NotImplementedError\n____________________________ test_bad_amount[10.5] _____________________________\n\namount = 10.5\n\n    @pytest.mark.parametrize(\"amount\", [0, -5, 10.5, True])\n    def test_bad_amount(amount):\n        with pytest.raises(ValueError):\n>           Workflow(ROLES).submit(\"eve\", amount)\n            ^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:31: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.expenses.Workflow object at 0x7f79ac98a8b0>\nroles = {'eve': 'employee', 'max': 'manager', 'mia': 'manager'}\n\n    def __init__(self, roles):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/expenses.py:7: NotImplementedError\n____________________________ test_bad_amount[True] _____________________________\n\namount = True\n\n    @pytest.mark.parametrize(\"amount\", [0, -5, 10.5, True])\n    def test_bad_amount(amount):\n        with pytest.raises(ValueError):\n>           Workflow(ROLES).submit(\"eve\", amount)\n            ^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:31: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.expenses.Workflow object at 0x7f79ac98b570>\nroles = {'eve': 'employee', 'max': 'manager', 'mia': 'manager'}\n\n    def __init__(self, roles):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/expenses.py:7: NotImplementedError\n______________________ test_reason_required_and_unknowns _______________________\n\n    def test_reason_required_and_unknowns():\n>       wf = Workflow(ROLES)\n             ^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:35: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.expenses.Workflow object at 0x7f79ac9af250>\nroles = {'eve': 'employee', 'max': 'manager', 'mia': 'manager'}\n\n    def __init__(self, roles):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/expenses.py:7: NotImplementedError\n____________________________ test_get_returns_copy _____________________________\n\n    def test_get_returns_copy():\n>       wf = Workflow(ROLES)\n             ^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:47: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.expenses.Workflow object at 0x7f79ac9af850>\nroles = {'eve': 'employee', 'max': 'manager', 'mia': 'manager'}\n\n    def __init__(self, roles):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/expenses.py:7: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_manager_approves - NotImplementedError\nFAILED tests/test_public.py::test_employee_cannot_approve - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_no_self_approval - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_decisions_are_final - NotImplemente...\nFAILED hidden_oracle/test_hidden.py::test_bad_amount[0] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_amount[-5] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_amount[10.5] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_amount[True] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_reason_required_and_unknowns - NotI...\nFAILED hidden_oracle/test_hidden.py::test_get_returns_copy - NotImplementedError\n10 failed in 0.05s\n",
+  "evaluated_tree_sha256": "d332fcd972eda6b3da220b7350f777477d11a1eea9643bfb51c47207ad407dd9"
+}

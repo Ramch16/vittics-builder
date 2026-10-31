@@ -1,0 +1,57 @@
+{
+  "task_id": "T01",
+  "checks": [
+    {
+      "id": "tests.test_public::test_imports_valid_rows",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_duplicate_id_is_rejected",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_no_partial_write_on_error",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_duplicate_against_store",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_missing_column",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_email[nobody]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_email[a@@b.io]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_email[@b.io]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_email[a@]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_column_order_extra_columns_and_whitespace",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_header_only",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_one_error_per_bad_row",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "_\n\nemail = '@b.io'\n\n    @pytest.mark.parametrize(\"email\", [\"nobody\", \"a@@b.io\", \"@b.io\", \"a@\"])\n    def test_bad_email(email):\n        with pytest.raises(ImportRejected):\n>           import_rows(f\"id,name,email\\n1,A,{email}\\n\", {})\n\nhidden_oracle/test_hidden.py:28: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ntext = 'id,name,email\\n1,A,@b.io\\n', store = {}\n\n    def import_rows(text, store):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/csv_import.py:8: NotImplementedError\n______________________________ test_bad_email[a@] ______________________________\n\nemail = 'a@'\n\n    @pytest.mark.parametrize(\"email\", [\"nobody\", \"a@@b.io\", \"@b.io\", \"a@\"])\n    def test_bad_email(email):\n        with pytest.raises(ImportRejected):\n>           import_rows(f\"id,name,email\\n1,A,{email}\\n\", {})\n\nhidden_oracle/test_hidden.py:28: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ntext = 'id,name,email\\n1,A,a@\\n', store = {}\n\n    def import_rows(text, store):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/csv_import.py:8: NotImplementedError\n________________ test_column_order_extra_columns_and_whitespace ________________\n\n    def test_column_order_extra_columns_and_whitespace():\n        store = {}\n>       assert import_rows(\"email,team,id,name\\n a@x.io ,red, 7 , Ana \\n\", store) == {\"imported\": 1}\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:33: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ntext = 'email,team,id,name\\n a@x.io ,red, 7 , Ana \\n', store = {}\n\n    def import_rows(text, store):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/csv_import.py:8: NotImplementedError\n_______________________________ test_header_only _______________________________\n\n    def test_header_only():\n        store = {}\n>       assert import_rows(\"id,name,email\\n\", store) == {\"imported\": 0} and store == {}\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:39: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ntext = 'id,name,email\\n', store = {}\n\n    def import_rows(text, store):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/csv_import.py:8: NotImplementedError\n__________________________ test_one_error_per_bad_row __________________________\n\n    def test_one_error_per_bad_row():\n        with pytest.raises(ImportRejected) as e:\n>           import_rows(\"id,name,email\\n1,,x\\n2,B,b@x.io\\n2,C,c@x.io\\n\", {})\n\nhidden_oracle/test_hidden.py:44: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ntext = 'id,name,email\\n1,,x\\n2,B,b@x.io\\n2,C,c@x.io\\n', store = {}\n\n    def import_rows(text, store):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/csv_import.py:8: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_imports_valid_rows - NotImplementedError\nFAILED tests/test_public.py::test_duplicate_id_is_rejected - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_no_partial_write_on_error - NotImpl...\nFAILED hidden_oracle/test_hidden.py::test_duplicate_against_store - NotImplem...\nFAILED hidden_oracle/test_hidden.py::test_missing_column - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_email[nobody] - NotImplementedE...\nFAILED hidden_oracle/test_hidden.py::test_bad_email[a@@b.io] - NotImplemented...\nFAILED hidden_oracle/test_hidden.py::test_bad_email[@b.io] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_email[a@] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_column_order_extra_columns_and_whitespace\nFAILED hidden_oracle/test_hidden.py::test_header_only - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_one_error_per_bad_row - NotImplemen...\n12 failed in 0.05s\n",
+  "evaluated_tree_sha256": "4dd3913027f0a6d00a1b343b8a326e867acd4c85a6abeea975fd9362ec160a9f"
+}

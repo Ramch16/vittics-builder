@@ -1,0 +1,144 @@
+{
+  "by_condition": {
+    "multi_agent": {
+      "acceptance_rate": 0.0,
+      "accepted_runs": 0,
+      "conditional_release_rate": 1.0,
+      "cost_per_accepted_run": null,
+      "currencies": [
+        "USD"
+      ],
+      "human_minutes": 0,
+      "incomplete_runs": 0,
+      "input_tokens": 21600,
+      "output_tokens": 8640,
+      "release_and_oracle_success_rate": 0.0,
+      "runs": 24,
+      "runs_reaching_release_gate": 24,
+      "tasks": 8,
+      "terminal_statuses": {
+        "rejected": 24
+      },
+      "total_cost": 0.0,
+      "unknown_cost_runs": 0
+    },
+    "single_agent": {
+      "acceptance_rate": 0.0,
+      "accepted_runs": 0,
+      "conditional_release_rate": 0.0,
+      "cost_per_accepted_run": null,
+      "currencies": [
+        "USD"
+      ],
+      "human_minutes": 0,
+      "incomplete_runs": 0,
+      "input_tokens": 21600,
+      "output_tokens": 8640,
+      "release_and_oracle_success_rate": 0.0,
+      "runs": 24,
+      "runs_reaching_release_gate": 24,
+      "tasks": 8,
+      "terminal_statuses": {
+        "rejected": 24
+      },
+      "total_cost": 0.0,
+      "unknown_cost_runs": 0
+    }
+  },
+  "data_kinds": [
+    "synthetic-mock"
+  ],
+  "limitations": [
+    "Exploratory: no significance test; repeats are clustered by task.",
+    "Synthetic or mock records say nothing about real performance."
+  ],
+  "paired_summary": {
+    "max_difference": 0.0,
+    "median_difference": 0.0,
+    "min_difference": 0.0,
+    "tasks": 8
+  },
+  "schema_version": 1,
+  "task_paired": [
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T01"
+    },
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T02"
+    },
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T03"
+    },
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T04"
+    },
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T05"
+    },
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T06"
+    },
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T07"
+    },
+    {
+      "difference": 0.0,
+      "multi_agent_rate": 0.0,
+      "repeats": {
+        "multi_agent": 3,
+        "single_agent": 3
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T08"
+    }
+  ]
+}

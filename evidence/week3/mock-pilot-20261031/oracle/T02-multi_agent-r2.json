@@ -1,0 +1,57 @@
+{
+  "task_id": "T02",
+  "checks": [
+    {
+      "id": "tests.test_public::test_request_reduces_available",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_cannot_overdraw",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_pending_and_approved_both_count",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_cancel_restores",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_days[0]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_days[-1]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_days[1.5]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_days[True]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_days[2]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_invalid_transitions_change_nothing",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_unknowns",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_failed_request_creates_nothing",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "alances = {'ana': 5}\n\n    def __init__(self, balances):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/ledger.py:11: NotImplementedError\n_____________________________ test_bad_days[True] ______________________________\n\ndays = True\n\n    @pytest.mark.parametrize(\"days\", [0, -1, 1.5, True, \"2\"])\n    def test_bad_days(days):\n        with pytest.raises(ValueError):\n>           Ledger({\"ana\": 5}).request(\"ana\", days)\n            ^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:26: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.ledger.Ledger object at 0x7f74b453a580>, balances = {'ana': 5}\n\n    def __init__(self, balances):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/ledger.py:11: NotImplementedError\n_______________________________ test_bad_days[2] _______________________________\n\ndays = '2'\n\n    @pytest.mark.parametrize(\"days\", [0, -1, 1.5, True, \"2\"])\n    def test_bad_days(days):\n        with pytest.raises(ValueError):\n>           Ledger({\"ana\": 5}).request(\"ana\", days)\n            ^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:26: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.ledger.Ledger object at 0x7f74b4562750>, balances = {'ana': 5}\n\n    def __init__(self, balances):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/ledger.py:11: NotImplementedError\n___________________ test_invalid_transitions_change_nothing ____________________\n\n    def test_invalid_transitions_change_nothing():\n>       l = Ledger({\"ana\": 5})\n            ^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:30: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.ledger.Ledger object at 0x7f74b4562150>, balances = {'ana': 5}\n\n    def __init__(self, balances):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/ledger.py:11: NotImplementedError\n________________________________ test_unknowns _________________________________\n\n    def test_unknowns():\n>       l = Ledger({\"ana\": 5})\n            ^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:44: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.ledger.Ledger object at 0x7f74b45663f0>, balances = {'ana': 5}\n\n    def __init__(self, balances):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/ledger.py:11: NotImplementedError\n_____________________ test_failed_request_creates_nothing ______________________\n\n    def test_failed_request_creates_nothing():\n>       l = Ledger({\"ana\": 1})\n            ^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:52: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.ledger.Ledger object at 0x7f74b444c9b0>, balances = {'ana': 1}\n\n    def __init__(self, balances):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/ledger.py:11: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_request_reduces_available - NotImplementedE...\nFAILED tests/test_public.py::test_cannot_overdraw - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_pending_and_approved_both_count - N...\nFAILED hidden_oracle/test_hidden.py::test_cancel_restores - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_days[0] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_days[-1] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_days[1.5] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_days[True] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_days[2] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_invalid_transitions_change_nothing\nFAILED hidden_oracle/test_hidden.py::test_unknowns - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_failed_request_creates_nothing - No...\n12 failed in 0.05s\n",
+  "evaluated_tree_sha256": "03be5da7c90a311bbb3fefbc9a648a63d1a56cba78a43de3350897d3ba97b06b"
+}

@@ -1,6 +1,7 @@
 """The tools agents work with. Everything is confined to a project workspace."""
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shutil
@@ -12,6 +13,19 @@ MAX_OUTPUT = 12_000
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache", "dist", "build"}
 SECRET_ENV = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", re.I)
 GIT_CONFIG_SET = re.compile(r"GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$")
+# A value that embeds a password in a URL (postgres://user:pass@host, https://user:token@host): dropped
+# whatever the variable is called (SEC-03).
+URL_CREDENTIALS = re.compile(r"[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@", re.I)
+# Agent commands in local mode get only these variables (decision D7): what shells, compilers and package
+# managers need to run, nothing else. Values that carry URL credentials are dropped even from these.
+COMMAND_ENV_ALLOW = re.compile(
+    r"(PATH|HOME|USER|USERNAME|LOGNAME|SHELL|TERM|TZ|LANG|LANGUAGE|LC_[A-Z]+|TMPDIR|TEMP|TMP|PWD|"
+    r"PYTHONPATH|PYTHONHOME|PYTHONIOENCODING|PYTHONUTF8|VIRTUAL_ENV|CONDA_[A-Z_]+|"
+    r"JAVA_HOME|GOPATH|GOROOT|GOCACHE|CARGO_HOME|RUSTUP_HOME|NVM_DIR|NODE_PATH|npm_config_cache|"
+    r"PLAYWRIGHT_BROWSERS_PATH|SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|NODE_EXTRA_CA_CERTS|"
+    r"HTTP_PROXY|HTTPS_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy|"
+    r"SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|PATHEXT|APPDATA|LOCALAPPDATA|USERPROFILE|PROGRAMFILES|"
+    r"PROGRAMFILES\(X86\)|PROGRAMDATA|COMMONPROGRAMFILES|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|OS)$", re.I)
 # Agents work in parallel git worktrees that share one object store. Git bookkeeping is
 # quick next to agent work, so it is serialised rather than risking ref-lock races.
 _GIT_LOCK = threading.RLock()
@@ -25,7 +39,7 @@ DENIED = [
     (r"\bdd\s+.*of=/dev/", "raw device write"),
     (r":\(\)\s*\{", "fork bomb"),
     (r"(curl|wget)\b[^|;&]*\|\s*(sudo\s+)?(ba|z)?sh\b", "piping a download into a shell"),
-    (r"(^|\s)(/etc/|/var/|/usr/|/root/|~/\.ssh|\$HOME/\.ssh)", "touching system or credential paths"),
+    (r"(^|[\s'\"=<>|;&(])(/etc/|/var/|/usr/|/root/|~/\.ssh|\$HOME/\.ssh)", "touching system or credential paths"),
     (r"\.\./\.\.", "leaving the workspace"),
     (r"\bgit\s+push\b", "pushing (a human publishes releases)"),
     # Windows (cmd.exe, PowerShell)
@@ -44,10 +58,69 @@ def scrub_env(environ, keep=lambda name: False) -> dict[str, str]:
     environment config (GIT_CONFIG_COUNT with GIT_CONFIG_KEY_<n>/GIT_CONFIG_VALUE_<n>) only works as a set, and a
     value can hold credentials (e.g. http.extraHeader), so once any of its keys is dropped the whole set goes;
     keeping a partial set makes every git command fail with "missing config key"."""
-    env = {k: v for k, v in environ.items() if not SECRET_ENV.search(k) or keep(k)}
+    env = {k: v for k, v in environ.items()
+           if (not SECRET_ENV.search(k) or keep(k)) and (not URL_CREDENTIALS.search(v) or keep(k))}
     if any(k.startswith("GIT_CONFIG_KEY_") and k not in env for k in environ):
         env = {k: v for k, v in env.items() if not GIT_CONFIG_SET.match(k)}
     return env
+
+
+def command_env(environ) -> dict[str, str]:
+    """The environment of an agent command in local mode: the allowlist above, then scrub_env over that."""
+    return scrub_env({k: v for k, v in environ.items() if COMMAND_ENV_ALLOW.match(k)})
+
+
+def secret_dirs(root: Path) -> list[Path]:
+    """Company data above a workspace (`<company>/.vittics`: vault, saved API keys, dashboard tokens, database)
+    that agent commands must not see (SEC-01). A workspace that itself lives under `.vittics` (arena candidates)
+    keeps the folders on its own path; every other entry there is hidden."""
+    hidden = []
+    for parent in root.parents:
+        data = parent / ".vittics"
+        if not data.is_dir():
+            continue
+        if data not in root.parents:
+            hidden.append(data)
+            continue
+        keep = root
+        while keep.parent != data:
+            keep = keep.parent
+        hidden += [entry for entry in sorted(data.iterdir()) if entry != keep]
+    return hidden
+
+
+@functools.lru_cache(maxsize=1)
+def sandbox_backend() -> str | None:
+    """The OS mechanism that hides company data from agent commands in local mode: bubblewrap on Linux,
+    sandbox-exec on macOS, each used only if a trial run works (bubblewrap needs unprivileged user namespaces).
+    None where neither works; then local mode is a seatbelt only and SEC-01 stays open on that computer."""
+    import sys
+    if sys.platform.startswith("linux") and shutil.which("bwrap"):
+        trial, name = ["bwrap", "--dev-bind", "/", "/", "true"], "bwrap"
+    elif sys.platform == "darwin" and shutil.which("sandbox-exec"):
+        trial, name = ["sandbox-exec", "-p", "(version 1)(allow default)", "/usr/bin/true"], "sandbox-exec"
+    else:
+        return None
+    try:
+        ok = subprocess.run(trial, capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        ok = False
+    return name if ok else None
+
+
+def hide_paths(command: str, cwd: Path, hidden: list[Path], backend: str | None) -> list[str] | None:
+    """argv that runs `command` with sh in `cwd`, with every path in `hidden` unreadable, or None if no
+    backend is available."""
+    if not hidden or not backend:
+        return None
+    if backend == "bwrap":
+        argv = ["bwrap", "--dev-bind", "/", "/"]
+        for path in hidden:
+            argv += ["--tmpfs", str(path)] if path.is_dir() else ["--ro-bind", os.devnull, str(path)]
+        return argv + ["--chdir", str(cwd), "--", "/bin/sh", "-c", command]
+    rules = " ".join(f'(subpath "{str(p.resolve())}")' for p in hidden)
+    profile = f"(version 1)(allow default)(deny file-read* file-write* {rules})"
+    return ["sandbox-exec", "-p", profile, "/bin/sh", "-c", command]
 
 
 GITIGNORE = [".vittics/browser/", "__pycache__/", "*.py[cod]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".coverage", "htmlcov/",
@@ -277,7 +350,7 @@ class Workspace:
                 raise ToolError(f"Command refused by company policy ({why}).")
         cap = int(max_seconds or self.timeout)
         timeout = min(int(timeout_seconds or cap), cap)
-        env = scrub_env(os.environ)
+        env = scrub_env(os.environ) if self.mode == "docker" else command_env(os.environ)
         env.update(extra_env or {})
         if self.mode == "docker":
             argv = ["docker", "run", "--rm", "-v", f"{self.root}:/work", "-w", "/work"]
@@ -287,6 +360,8 @@ class Workspace:
                 argv += ["--network", "none"]
             argv += [self.docker_image, "sh", "-lc", command]
             kwargs = dict(args=argv)
+        elif (hidden := hide_paths(command, self.root, secret_dirs(self.root), sandbox_backend())):
+            kwargs = dict(args=hidden, cwd=self.root)
         else:
             from .platforms import shell_command
             args, shell = shell_command(command)
@@ -317,7 +392,10 @@ class Workspace:
     def git(self, *args: str) -> str:
         with _GIT_LOCK:
             proc = subprocess.run(
-                ["git", "-c", "user.name=Vittics Builder", "-c", "user.email=vittics@localhost", *args],
+                # Hooks and fsmonitor run programs; agents can write .git through their shell, so the company's
+                # own git calls never run them (SEC-05, P-05a).
+                ["git", "-c", "user.name=Vittics Builder", "-c", "user.email=vittics@localhost",
+                 "-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false", *args],
                 cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
         if proc.returncode:

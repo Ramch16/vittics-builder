@@ -1,0 +1,143 @@
+{
+  "package_version": "0.1.0",
+  "tasks": {
+    "T01": {
+      "name": "T01-csv-validation",
+      "hashes": {
+        "task": "25c9c945b61173b4a40cd0edb25d5594a865d334747913a4035816f7b8b545a7",
+        "starter": "ce00167ad67de9f13bf88a9149cc58f2341797138e77059a4a16271dbad33e00",
+        "oracle": "08390c10c23d7f851acf0a8dc17771473bc51590b647f3832d96da3708fb0744",
+        "reference": "8d3e2b76bae8ec26621df65ca5986802d9b6e1f3fc1c55e7ae609adbd85c5003",
+        "spec": "0e49e6bf2386ce996f3bb16ad5a6b0f6f16cd4b42f78853b68e5778a8fd2c7e0"
+      },
+      "checks": 12,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    },
+    "T02": {
+      "name": "T02-leave-ledger",
+      "hashes": {
+        "task": "87c3349340a073e991be3e5547b8f0aa87f6aff0bc02750d9ce2e07c69b1e726",
+        "starter": "21bc925fa03194ce3c86bb3b3b646f212adf1db8437a2ffbc7812e92d42234ba",
+        "oracle": "5b8a77a8463f3b01aa670696ea790644691a744fcfdc2ddbf0dbdaf1a02bc49a",
+        "reference": "80a03a9c2823705d054f8f7b7eceb06d90b7a5ca87d92416e2feb6ef1b7b7dbb",
+        "spec": "fe2fc1247a8bcf2d45c06a285ffee9ed28d2396ce17b037e6346b808c5979d24"
+      },
+      "checks": 12,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    },
+    "T03": {
+      "name": "T03-inventory-reservations",
+      "hashes": {
+        "task": "605ca520b5711d46e33a95c827f723863fb0320a9dbf085bf9a9ce2b28cf20c9",
+        "starter": "2e4f473c896788fdb1ade97fbec4192e23c790030af9fa472ca22e18dae05af3",
+        "oracle": "916105653081ded95cbd9d595bd8f1eb31c8d663d3cc16e4bbb62052498e71c0",
+        "reference": "c6123a91fb5ab3155e28cb96f201a817931b558c20064d6c31e0edeb367cd130",
+        "spec": "a30ca0cd567120d7da76cb78e5f811dc5726497d3b888ea66b722beed89aa932"
+      },
+      "checks": 9,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    },
+    "T04": {
+      "name": "T04-expense-workflow",
+      "hashes": {
+        "task": "f26a630082ba5ea9e4b723d5e5eba934f88b3c6b8dd648d2e20c3dc34aac967f",
+        "starter": "83949539b7a74eb3c34cd804b6824c9f7fec66e328548cddd840c1386f11991f",
+        "oracle": "d30ad7f8d88c92a3fdb092e6b41bdec1eef0fad2183dcc5a84b99f7b5b9e358d",
+        "reference": "5af533391d0f8a7c221a3a2ce41b6bc7022f1d17e6cf4051699b646bf5da8bb2",
+        "spec": "11ba2946c6fd222e80e6356869911c07f18b3565356b30f62732b341661d813a"
+      },
+      "checks": 10,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    },
+    "T05": {
+      "name": "T05-timezone-reports",
+      "hashes": {
+        "task": "3770b5672f3a9d52b2cf89142345dae45b55b6e94c6e22d9ebf908a3926b5660",
+        "starter": "e0401d80c2cce5fa9b89a6cf9563afd3f02f431a09a83c6b93da9969e7a0a3d7",
+        "oracle": "9d18a2cbf74a3ddc73809b2ffed1797cad9c753910bffdfc6e7dce268b6a06ec",
+        "reference": "3aae603ccf4fae8695b851681ce1bf866c2cd96d4e9ba5fa5e12d663966e62a6",
+        "spec": "965db401104060c673968d453e53ee8795ff3db257fc9abd59feaa99a902be4b"
+      },
+      "checks": 12,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    },
+    "T06": {
+      "name": "T06-config-migration",
+      "hashes": {
+        "task": "269858a3ea987b849d494308e71dcdc13d6c425d6052ce64ea271c2fbf2901e0",
+        "starter": "4ad3cfc2a56ffdcec12b624ad2593fff460a5a0fe42d72f3d2cc01a2eeae1715",
+        "oracle": "d3b8dd7d6a8ca11507acfc832405e8759911e034ad8582c3431d2d45f3bd41dc",
+        "reference": "ee89aeed2890e5e867d5c9e4e56910243e7dfca2930ec316bdf15a6cd47eef7c",
+        "spec": "f7eede75c7e33aa5d5c0217afc211c53bbe7d7e808f02c253bcf0e251db9ebc3"
+      },
+      "checks": 11,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    },
+    "T07": {
+      "name": "T07-dependency-graph",
+      "hashes": {
+        "task": "b38d74f4911eaa4be0084c3098ead180649a4a4171a42c4102b54de52ae67e2e",
+        "starter": "6287a723ad9e96217562334f2b8cba12dca9be1da4d2dead4d2f79adeef8ce65",
+        "oracle": "ec73768eef4d673b770be76726331e21a881d3030f5b30e30b731de5297c6f66",
+        "reference": "cce60261430444e4bbd48e9b598898e721733373a733c627d967a24bf778660a",
+        "spec": "f1b6ef64c4dc9f6e65ce36508c2d3bf61f84209267a5890f7d884c11ec28898d"
+      },
+      "checks": 8,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    },
+    "T08": {
+      "name": "T08-document-revisions",
+      "hashes": {
+        "task": "c3350717d40e518d3fce464405d213338328148e2ca8e32ffa9e7a2bc317acf4",
+        "starter": "2c8ab14343cd64c4bac004ee81b24bd2b11ea39e4e59cf93e09926e5b17d565f",
+        "oracle": "d8448e03d4c1510f634cec26d97c6438b58cba3dd00d2a01a73370da325bafe7",
+        "reference": "1533fff4883b53829d8e1f0c027b328458d340a5a460b9c9088fe639440d5e24",
+        "spec": "bab4d11148a15a61be7c29508d56eaf02a3bf6c78f8618c11d0acc6b28771bee"
+      },
+      "checks": 7,
+      "public_checks": 2,
+      "starter_fails": true,
+      "starter_passed_checks": 0,
+      "reference_passes": true,
+      "reference_output": "",
+      "valid": true
+    }
+  },
+  "all_valid": true,
+  "python": "3.13.18"
+}

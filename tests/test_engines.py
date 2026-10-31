@@ -69,7 +69,7 @@ def test_review_through_a_cli_on_the_subscription(cli):
     argv = call["argv"]
     assert argv[argv.index("--model") + 1] == "sonnet"
     assert "--disallowedTools" in argv and "Edit" in argv[argv.index("--disallowedTools"):]   # reviewers only read
-    assert "Bash" in argv[argv.index("--allowedTools"):argv.index("--disallowedTools")]       # but may run tests
+    assert "Bash" in argv[argv.index("--disallowedTools"):]           # and get no shell (decision D4)
     used = co.db.one("SELECT * FROM usage WHERE agent_id=?", reviewer["id"])
     assert used["cost"] == 0 and used["model"] == "cli:fake/sonnet" and used["input_tokens"] == 1250
     assert "via fake" in used["purpose"]

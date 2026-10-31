@@ -1,0 +1,37 @@
+{
+  "task_id": "T08",
+  "checks": [
+    {
+      "id": "tests.test_public::test_create_update_get",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_stale_update",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_reload_keeps_history",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_stale_changes_nothing_on_disk",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_duplicates_and_unknowns",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_missing_and_corrupt_files",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_atomic_replace_used",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "0>\npath = PosixPath('/tmp/pytest-of-root/pytest-42/test_reload_keeps_history0/docs.json')\n\n    def __init__(self, path):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/docs.py:7: NotImplementedError\n______________________ test_stale_changes_nothing_on_disk ______________________\n\ntmp_path = PosixPath('/tmp/pytest-of-root/pytest-42/test_stale_changes_nothing_on_0')\n\n    def test_stale_changes_nothing_on_disk(tmp_path):\n        path = tmp_path / \"docs.json\"\n>       s = DocumentStore(path)\n            ^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:17: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.docs.DocumentStore object at 0x7fa67105a9e0>\npath = PosixPath('/tmp/pytest-of-root/pytest-42/test_stale_changes_nothing_on_0/docs.json')\n\n    def __init__(self, path):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/docs.py:7: NotImplementedError\n_________________________ test_duplicates_and_unknowns _________________________\n\ntmp_path = PosixPath('/tmp/pytest-of-root/pytest-42/test_duplicates_and_unknowns0')\n\n    def test_duplicates_and_unknowns(tmp_path):\n>       s = DocumentStore(tmp_path / \"d.json\")\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:27: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.docs.DocumentStore object at 0x7fa67105b100>\npath = PosixPath('/tmp/pytest-of-root/pytest-42/test_duplicates_and_unknowns0/d.json')\n\n    def __init__(self, path):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/docs.py:7: NotImplementedError\n________________________ test_missing_and_corrupt_files ________________________\n\ntmp_path = PosixPath('/tmp/pytest-of-root/pytest-42/test_missing_and_corrupt_files0')\n\n    def test_missing_and_corrupt_files(tmp_path):\n        missing = tmp_path / \"none.json\"\n        with pytest.raises(KeyError):\n>           DocumentStore(missing).get(\"a\")\n            ^^^^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:39: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.docs.DocumentStore object at 0x7fa670f7dc70>\npath = PosixPath('/tmp/pytest-of-root/pytest-42/test_missing_and_corrupt_files0/none.json')\n\n    def __init__(self, path):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/docs.py:7: NotImplementedError\n___________________________ test_atomic_replace_used ___________________________\n\ntmp_path = PosixPath('/tmp/pytest-of-root/pytest-42/test_atomic_replace_used0')\nmonkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa67105b230>\n\n    def test_atomic_replace_used(tmp_path, monkeypatch):\n        calls = []\n        real = os.replace\n        monkeypatch.setattr(os, \"replace\", lambda a, b: (calls.append((str(a), str(b))), real(a, b))[1])\n        path = tmp_path / \"docs.json\"\n>       DocumentStore(path).create(\"a\", \"x\")\n        ^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:52: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.docs.DocumentStore object at 0x7fa67102b020>\npath = PosixPath('/tmp/pytest-of-root/pytest-42/test_atomic_replace_used0/docs.json')\n\n    def __init__(self, path):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/docs.py:7: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_create_update_get - NotImplementedError\nFAILED tests/test_public.py::test_stale_update - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_reload_keeps_history - NotImplement...\nFAILED hidden_oracle/test_hidden.py::test_stale_changes_nothing_on_disk - Not...\nFAILED hidden_oracle/test_hidden.py::test_duplicates_and_unknowns - NotImplem...\nFAILED hidden_oracle/test_hidden.py::test_missing_and_corrupt_files - NotImpl...\nFAILED hidden_oracle/test_hidden.py::test_atomic_replace_used - NotImplemente...\n7 failed in 0.05s\n",
+  "evaluated_tree_sha256": "ad079af8f53fdba8690eed8a570b5771978fcd478b056963794074ceea924e8f"
+}

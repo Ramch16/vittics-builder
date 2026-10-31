@@ -1,0 +1,41 @@
+{
+  "task_id": "T07",
+  "checks": [
+    {
+      "id": "tests.test_public::test_simple_chain",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_cycle",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_alphabetical_tie_break",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_diamond",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_missing_named",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_cycle_members_exclude_bystanders",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_self_cycle_duplicates_and_no_mutation",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_empty",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "a']}\n\n    def install_order(deps):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/graph.py:12: NotImplementedError\n_________________________ test_alphabetical_tie_break __________________________\n\n    def test_alphabetical_tie_break():\n>       assert install_order({\"c\": [], \"a\": [], \"b\": [\"c\", \"a\"]}) == [\"a\", \"c\", \"b\"]\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:7: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndeps = {'c': [], 'a': [], 'b': ['c', 'a']}\n\n    def install_order(deps):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/graph.py:12: NotImplementedError\n_________________________________ test_diamond _________________________________\n\n    def test_diamond():\n        deps = {\"top\": [\"left\", \"right\"], \"left\": [\"base\"], \"right\": [\"base\"], \"base\": []}\n>       assert install_order(deps) == [\"base\", \"left\", \"right\", \"top\"]\n               ^^^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:12: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndeps = {'top': ['left', 'right'], 'left': ['base'], 'right': ['base'], 'base': []}\n\n    def install_order(deps):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/graph.py:12: NotImplementedError\n______________________________ test_missing_named ______________________________\n\n    def test_missing_named():\n        with pytest.raises(MissingDependency, match=\"ghost\"):\n>           install_order({\"a\": [\"ghost\"]})\n\nhidden_oracle/test_hidden.py:17: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndeps = {'a': ['ghost']}\n\n    def install_order(deps):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/graph.py:12: NotImplementedError\n____________________ test_cycle_members_exclude_bystanders _____________________\n\n    def test_cycle_members_exclude_bystanders():\n        with pytest.raises(CycleError) as e:\n>           install_order({\"x\": [\"y\"], \"y\": [\"z\"], \"z\": [\"x\"], \"w\": [\"x\"], \"v\": []})\n\nhidden_oracle/test_hidden.py:22: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndeps = {'x': ['y'], 'y': ['z'], 'z': ['x'], 'w': ['x'], ...}\n\n    def install_order(deps):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/graph.py:12: NotImplementedError\n__________________ test_self_cycle_duplicates_and_no_mutation __________________\n\n    def test_self_cycle_duplicates_and_no_mutation():\n        with pytest.raises(CycleError) as e:\n>           install_order({\"a\": [\"a\"]})\n\nhidden_oracle/test_hidden.py:28: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndeps = {'a': ['a']}\n\n    def install_order(deps):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/graph.py:12: NotImplementedError\n__________________________________ test_empty __________________________________\n\n    def test_empty():\n>       assert install_order({}) == []\n               ^^^^^^^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:36: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndeps = {}\n\n    def install_order(deps):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/graph.py:12: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_simple_chain - NotImplementedError\nFAILED tests/test_public.py::test_cycle - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_alphabetical_tie_break - NotImpleme...\nFAILED hidden_oracle/test_hidden.py::test_diamond - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_missing_named - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_cycle_members_exclude_bystanders - ...\nFAILED hidden_oracle/test_hidden.py::test_self_cycle_duplicates_and_no_mutation\nFAILED hidden_oracle/test_hidden.py::test_empty - NotImplementedError\n8 failed in 0.04s\n",
+  "evaluated_tree_sha256": "7afdd10732b008af9a118e2d90b46fb77425241d81bdfb175418411c5ba3c5bb"
+}
