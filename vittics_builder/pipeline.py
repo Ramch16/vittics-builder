@@ -801,6 +801,9 @@ class Pipeline:
             report = self._read(ws, "docs/QA_REPORT.md") or "No QA report was produced."
             audits = sorted((ws.root / "docs" / "audits").glob("*.md")) if (ws.root / "docs" / "audits").is_dir() else []
             report += "\n\nExecutable acceptance checks passed. Evidence: docs/VERIFICATION.json"
+            if checked.get("coverage") == "legacy-unmapped":
+                report += ("\n\nCoverage: legacy-unmapped. product.json has no requirements registry, so the passing "
+                           "checks are not mapped to PRD requirements. Confirm the requirements yourself before approving.")
             if audits:
                 report += "\n\nAudit reports: " + ", ".join(f"docs/audits/{a.name}" for a in audits)
             later = self.db.all("SELECT id, title FROM tasks WHERE project_id=? AND origin='agent' AND status='backlog' "
@@ -1088,11 +1091,18 @@ class Pipeline:
             self._approval(pid, "hire", boss, f"Hire another {role['title']}?", summary,
                            {"role": role["id"], "waiting": row["n"], "staff": len(staff)})
 
+    def _review_mode(self, pid: int | None = None) -> str:
+        return "light" if pid is not None and self.small(pid) else self.s.review_mode
+
+    def min_reviews(self, pid: int | None = None) -> int:
+        """Independent verdicts a ticket needs before it can be done: two in thorough mode, otherwise one."""
+        return 2 if self._review_mode(pid) == "thorough" else 1
+
     def _checkers(self, pid: int | None = None) -> list[dict]:
         """Roles that check each ticket, by review_mode (light for a small project). Fewer checks cost less;
         release QA always runs, and the audits for standard projects."""
         staffed = self.org.staffed_roles("reviewer", "qa")
-        mode = "light" if pid is not None and self.small(pid) else self.s.review_mode
+        mode = self._review_mode(pid)
         if mode == "thorough":
             return staffed
         reviewers = sorted((r for r in staffed if r["kind"] == "reviewer"), key=lambda r: r["id"] != "code_reviewer")
@@ -1259,6 +1269,17 @@ class Pipeline:
                 if rv["verdict"] != "approve":
                     approved = False
                     findings.append(f"{checker['name']} ({check_role['title']}, {rv['score']:.0f}/100): {rv['notes']}")
+            needed = self.min_reviews(pid)
+            if len(scores) < needed:
+                # A ticket is never done on fewer independent verdicts than the policy requires (A-01).
+                self.db.run("UPDATE tasks SET status='todo', result=?, updated_at=? WHERE id=?",
+                            res.text, now(), task["id"])
+                note(self.db, task["id"], "Vittics Builder",
+                     f"Not marked done: it needs {needed} independent review(s) and got {len(scores)}. "
+                     "No reviewer or QA other than the author was available.", kind="handoff")
+                self.db.log("warn", f"[{task['key']}] has {len(scores)} of {needed} required independent reviews.", pid)
+                raise PipelineError(f"[{task['key']}] needs {needed} independent review(s) but only {len(scores)} "
+                                    "reviewer(s) other than the author are available. Hire a reviewer or QA, then resume.")
             self.perf.evaluate(agent["id"])
             if res.route_id and self.runtime.router:
                 self.runtime.router.evaluate(res.route_id, approved, sum(scores) / len(scores) if scores else None, lessons='\n'.join(findings))

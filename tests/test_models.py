@@ -111,12 +111,22 @@ def test_cli_presets_put_the_role_in_the_prompt_and_gate_edits(co, tmp_path, mon
     preset = BUILTIN_ENGINES[engine]
     co.s.engines[engine] = {**preset, "command": [sys.executable, str(fake), *preset["command"][1:]]}
     p = co.pipeline.create_project("Greeter", "A tiny library.")
-    for name in ("Pavan", "Hari"):                                   # a reviewer, then a builder
-        co.org.set_model(name, f"cli:{engine}")
-        res = co.runtime.run(co.org.agent(name), "Do the work", co.pipeline.workspace(p), project_id=p["id"])
+    read_only_ok = bool(preset["level_args"]["read"])
+    co.org.set_model("Pavan", f"cli:{engine}")                       # a reviewer
+    res = co.runtime.run(co.org.agent("Pavan"), "Do the work", co.pipeline.workspace(p), project_id=p["id"])
+    if read_only_ok:
         assert res.completed and res.text == "Checked it."
-    reviewer, builder = [json.loads(line) for line in log.read_text().splitlines()]
-    prompt = next(a for a in reviewer if "Do the work" in a)
-    assert prompt.startswith("You are Pavan")                       # role and rules lead the prompt
+    else:                                                            # refused: no read-only mode (SEC-08, D5)
+        assert not res.completed and "no verified read-only mode" in res.text and not log.exists()
+    co.org.set_model("Hari", f"cli:{engine}")                        # a builder: runs with the edit flag
+    res = co.runtime.run(co.org.agent("Hari"), "Do the work", co.pipeline.workspace(p), project_id=p["id"])
+    assert res.completed and res.text == "Checked it."
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    builder = calls[-1]
+    if read_only_ok:
+        write_only = set(preset["level_args"]["write"]) - set(preset["level_args"]["read"])
+        assert not write_only & set(calls[0])
+    prompt = next(a for a in builder if "Do the work" in a)
+    assert prompt.startswith("You are Hari")                        # role and rules lead the prompt
     write_flags = set(preset["level_args"]["write"]) - set(preset["level_args"]["read"])
-    assert write_flags and not write_flags & set(reviewer) and write_flags <= set(builder)
+    assert write_flags and write_flags <= set(builder)

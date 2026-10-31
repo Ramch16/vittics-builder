@@ -1,6 +1,20 @@
 # Changelog
 
 ## Unreleased
+- **No task is done without an independent review.** If no reviewer or QA other than the author is available,
+  the ticket stays open and the build stops with a resumable error. A ticket needs one independent verdict, two
+  in `thorough` mode. Previously it was marked done with zero reviews.
+- **Release approvals say when coverage is legacy-unmapped.** A product.json without a requirements registry can
+  still be released, but the CTO's release approval now states that its checks are not mapped to requirements.
+- **Company data hidden from agents' commands (local mode).** bubblewrap (Linux) or sandbox-exec (macOS) hides
+  the company's `.vittics` folder, used only when a trial run works. Commands also get an allowlisted environment,
+  and values carrying URL passwords are dropped. The deny list now also catches quoted system paths.
+- **Git hooks and fsmonitor never run on the company's git calls.** An agent could plant a pre-commit hook through
+  its shell; the company's commit then ran it outside the command boundary.
+- **Reviewers have no shell; unverified CLIs do not run read-only roles.** Reviewer roles read and judge (approved
+  checks still run on the host). Gemini, Copilot, Cursor, OpenCode and Qwen adapters, which have no verified
+  read-only flag, are refused for read-only roles in a project workspace; builders are unchanged.
+- **README review wording.** Security review runs on every task only in `thorough` mode, as the code does.
 - **Benchmark run records, schema v2 (draft).** Records now carry the independent oracle's kind, evaluated tree and
   run reference, plus per-run caps. `benchmarks.check_semantics` enforces consistency the schema cannot express.
   `summarize_records` counts a run as accepted only with an independent, nonempty, all-passing oracle, and reports

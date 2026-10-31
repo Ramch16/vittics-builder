@@ -6,8 +6,11 @@ A software company staffed by AI agents and run by two people: a CEO and a CTO.
 
 You write a brief. A product manager turns it into requirements, a UX designer
 specifies how it is used, an architect designs the system and splits the work,
-specialists build it in a real git repository, and code review, security review
-and QA check every task. Before release the product is audited for security,
+specialists build it in a real git repository, and independent reviewers check
+every task: code review and QA in the default `standard` mode, every staffed
+reviewer role (including security review) in `thorough` mode, one check in
+`light` mode. No task is marked done without at least one independent review
+(two in `thorough`). Before release the product is audited for security,
 performance and compliance. The humans approve at the points that matter. Agents are scored on every piece of work.
 Those who keep failing are put on probation, replaced, and, if the replacement
 turns out worse, brought back.
@@ -15,7 +18,7 @@ turns out worse, brought back.
 ```
 brief ─► requirements + UX design ─► CEO ─► architecture + plan ─► CTO ─► build ─► release check + audits ─► CTO ─► CEO ─► shipped
                                                                          │                    │
-                        each task: implement ─► code review ─► security review ─► QA          └ findings become fix tasks,
+                        each task: implement ─► code review ─► QA (+ security review: thorough) └ findings become fix tasks,
                         fails: rework (max_rework times) ─► escalate to CTO                     then the audits run again
 ```
 
@@ -142,7 +145,7 @@ Ten departments, 21 roles, 22 agents out of the box.
 | Engineering | CTO | Architect, backend (2), frontend, mobile |
 | Data and AI | CTO | Database engineer, data engineer, ML engineer |
 | Quality and Testing | CTO | Code reviewer, QA engineer, test automation engineer, performance engineer |
-| Security | CTO | Security engineer (reviews every task), security auditor (audits the release) |
+| Security | CTO | Security engineer (reviews every task in `thorough` mode), security auditor (audits the release) |
 | Platform and Reliability | CTO | DevOps engineer, site reliability engineer |
 
 The architect only gives tasks to the roles a product needs, so a command-line
@@ -799,7 +802,7 @@ A role's `kind` tells the pipeline what it is for:
 | `designer` | Writes `docs/DESIGN.md`; approved by the CEO together with the requirements |
 | `planner` | Writes the architecture and the task plan |
 | `builder` | Gets tasks from the plan |
-| `reviewer` | Checks every task. Each staffed reviewer role checks each task |
+| `reviewer` | Checks tasks (one reviewer in `standard`, every staffed reviewer role in `thorough`); reads and judges, no shell |
 | `qa` | Tests every task and runs the release check |
 | `auditor` | Audits the finished product; blocking findings become fix tasks |
 
@@ -821,12 +824,19 @@ Each role gets only the tools listed for it.
 ## Safety
 
 - File tools cannot leave the project workspace.
-- Commands run without your API keys or tokens in their environment, with a
-  timeout, and a deny list blocks `sudo`, deleting outside the workspace,
-  piping downloads into a shell, credential paths and `git push`.
-- That deny list is a seatbelt, not a sandbox. For real work set
+- Commands get only an allowlisted environment (PATH, HOME, locale, toolchain
+  variables), never your API keys or tokens, and values carrying URL passwords
+  are dropped. They run with a timeout, and a deny list blocks `sudo`, deleting
+  outside the workspace, piping downloads into a shell, credential paths and `git push`.
+- In `sandbox.mode: local`, the company's data folder (`.vittics`: vault, saved
+  keys, tokens, database) is hidden from agents' commands by bubblewrap on Linux
+  or sandbox-exec on macOS. Without either (Windows, or Linux without
+  bubblewrap) local mode is a seatbelt only. For real work set
   `sandbox.mode: docker` in `org.yaml` so commands run in a container with no
   network by default.
+- The company's own git calls never run git hooks or fsmonitor programs, so an
+  agent cannot plant one to run outside its command.
+- Read-only roles never run on a CLI whose read-only mode is unverified.
 - Publishing is yours: agents never push. Review the workspace, then push it yourself.
 
 ## Limits to know about

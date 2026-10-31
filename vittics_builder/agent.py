@@ -180,6 +180,10 @@ class AgentRuntime:
             names = [n for n in names if n != "delegate"]
         if ws and project_id and not chat_with and "run_command" in names:
             names.append("run_approved_checks")
+        if role["kind"] == "reviewer":
+            # Reviewers read and judge; a shell could still write files, so they get none (decision D4).
+            # Approved checks still run, on the host, through run_approved_checks. QA keeps its shell.
+            names = [n for n in names if n != "run_command"]
         tools = [self.integrations.schema(role['id'], n) if self.integrations and
                  n in ('browser_journey', 'mcp_call', 'mcp_list_tools') else tool_schema(n) for n in names]
         if project_id and self.tickets:
