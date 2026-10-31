@@ -1,0 +1,357 @@
+{
+  "seed": 20261031,
+  "repeats": 3,
+  "conditions": [
+    "multi_agent",
+    "single_agent"
+  ],
+  "tasks": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08"
+  ],
+  "algorithm": "python random.Random(seed); per-task shuffled first-condition list; shuffled blocks",
+  "slots": [
+    {
+      "slot": 1,
+      "task_id": "T05",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T05-single_agent-r3"
+    },
+    {
+      "slot": 2,
+      "task_id": "T05",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T05-multi_agent-r3"
+    },
+    {
+      "slot": 3,
+      "task_id": "T01",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T01-multi_agent-r2"
+    },
+    {
+      "slot": 4,
+      "task_id": "T01",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T01-single_agent-r2"
+    },
+    {
+      "slot": 5,
+      "task_id": "T02",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T02-single_agent-r2"
+    },
+    {
+      "slot": 6,
+      "task_id": "T02",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T02-multi_agent-r2"
+    },
+    {
+      "slot": 7,
+      "task_id": "T04",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T04-single_agent-r1"
+    },
+    {
+      "slot": 8,
+      "task_id": "T04",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T04-multi_agent-r1"
+    },
+    {
+      "slot": 9,
+      "task_id": "T06",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T06-multi_agent-r3"
+    },
+    {
+      "slot": 10,
+      "task_id": "T06",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T06-single_agent-r3"
+    },
+    {
+      "slot": 11,
+      "task_id": "T08",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T08-multi_agent-r1"
+    },
+    {
+      "slot": 12,
+      "task_id": "T08",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T08-single_agent-r1"
+    },
+    {
+      "slot": 13,
+      "task_id": "T07",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T07-multi_agent-r3"
+    },
+    {
+      "slot": 14,
+      "task_id": "T07",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T07-single_agent-r3"
+    },
+    {
+      "slot": 15,
+      "task_id": "T07",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T07-multi_agent-r2"
+    },
+    {
+      "slot": 16,
+      "task_id": "T07",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T07-single_agent-r2"
+    },
+    {
+      "slot": 17,
+      "task_id": "T03",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T03-multi_agent-r3"
+    },
+    {
+      "slot": 18,
+      "task_id": "T03",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T03-single_agent-r3"
+    },
+    {
+      "slot": 19,
+      "task_id": "T06",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T06-multi_agent-r2"
+    },
+    {
+      "slot": 20,
+      "task_id": "T06",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T06-single_agent-r2"
+    },
+    {
+      "slot": 21,
+      "task_id": "T05",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T05-multi_agent-r2"
+    },
+    {
+      "slot": 22,
+      "task_id": "T05",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T05-single_agent-r2"
+    },
+    {
+      "slot": 23,
+      "task_id": "T04",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T04-multi_agent-r2"
+    },
+    {
+      "slot": 24,
+      "task_id": "T04",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T04-single_agent-r2"
+    },
+    {
+      "slot": 25,
+      "task_id": "T08",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T08-single_agent-r3"
+    },
+    {
+      "slot": 26,
+      "task_id": "T08",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T08-multi_agent-r3"
+    },
+    {
+      "slot": 27,
+      "task_id": "T03",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T03-single_agent-r1"
+    },
+    {
+      "slot": 28,
+      "task_id": "T03",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T03-multi_agent-r1"
+    },
+    {
+      "slot": 29,
+      "task_id": "T01",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T01-multi_agent-r1"
+    },
+    {
+      "slot": 30,
+      "task_id": "T01",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T01-single_agent-r1"
+    },
+    {
+      "slot": 31,
+      "task_id": "T02",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T02-multi_agent-r1"
+    },
+    {
+      "slot": 32,
+      "task_id": "T02",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T02-single_agent-r1"
+    },
+    {
+      "slot": 33,
+      "task_id": "T08",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T08-multi_agent-r2"
+    },
+    {
+      "slot": 34,
+      "task_id": "T08",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T08-single_agent-r2"
+    },
+    {
+      "slot": 35,
+      "task_id": "T04",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T04-multi_agent-r3"
+    },
+    {
+      "slot": 36,
+      "task_id": "T04",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T04-single_agent-r3"
+    },
+    {
+      "slot": 37,
+      "task_id": "T05",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T05-multi_agent-r1"
+    },
+    {
+      "slot": 38,
+      "task_id": "T05",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T05-single_agent-r1"
+    },
+    {
+      "slot": 39,
+      "task_id": "T02",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T02-multi_agent-r3"
+    },
+    {
+      "slot": 40,
+      "task_id": "T02",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T02-single_agent-r3"
+    },
+    {
+      "slot": 41,
+      "task_id": "T06",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T06-single_agent-r1"
+    },
+    {
+      "slot": 42,
+      "task_id": "T06",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T06-multi_agent-r1"
+    },
+    {
+      "slot": 43,
+      "task_id": "T07",
+      "repeat": 1,
+      "condition": "single_agent",
+      "run_id": "T07-single_agent-r1"
+    },
+    {
+      "slot": 44,
+      "task_id": "T07",
+      "repeat": 1,
+      "condition": "multi_agent",
+      "run_id": "T07-multi_agent-r1"
+    },
+    {
+      "slot": 45,
+      "task_id": "T03",
+      "repeat": 2,
+      "condition": "multi_agent",
+      "run_id": "T03-multi_agent-r2"
+    },
+    {
+      "slot": 46,
+      "task_id": "T03",
+      "repeat": 2,
+      "condition": "single_agent",
+      "run_id": "T03-single_agent-r2"
+    },
+    {
+      "slot": 47,
+      "task_id": "T01",
+      "repeat": 3,
+      "condition": "single_agent",
+      "run_id": "T01-single_agent-r3"
+    },
+    {
+      "slot": 48,
+      "task_id": "T01",
+      "repeat": 3,
+      "condition": "multi_agent",
+      "run_id": "T01-multi_agent-r3"
+    }
+  ]
+}
