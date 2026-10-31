@@ -11,6 +11,7 @@ from pathlib import Path
 MAX_OUTPUT = 12_000
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache", "dist", "build"}
 SECRET_ENV = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", re.I)
+GIT_CONFIG_SET = re.compile(r"GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$")
 # Agents work in parallel git worktrees that share one object store. Git bookkeeping is
 # quick next to agent work, so it is serialised rather than risking ref-lock races.
 _GIT_LOCK = threading.RLock()
@@ -36,6 +37,17 @@ DENIED = [
      "touching system or credential paths"),
     (r"(?i)(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|;&]*\|\s*iex\b", "piping a download into a shell"),
 ]
+
+
+def scrub_env(environ, keep=lambda name: False) -> dict[str, str]:
+    """`environ` without secret-looking variables (by name), except those `keep(name)` accepts. Git's
+    environment config (GIT_CONFIG_COUNT with GIT_CONFIG_KEY_<n>/GIT_CONFIG_VALUE_<n>) only works as a set, and a
+    value can hold credentials (e.g. http.extraHeader), so once any of its keys is dropped the whole set goes;
+    keeping a partial set makes every git command fail with "missing config key"."""
+    env = {k: v for k, v in environ.items() if not SECRET_ENV.search(k) or keep(k)}
+    if any(k.startswith("GIT_CONFIG_KEY_") and k not in env for k in environ):
+        env = {k: v for k, v in env.items() if not GIT_CONFIG_SET.match(k)}
+    return env
 
 
 GITIGNORE = [".vittics/browser/", "__pycache__/", "*.py[cod]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".coverage", "htmlcov/",
@@ -265,7 +277,7 @@ class Workspace:
                 raise ToolError(f"Command refused by company policy ({why}).")
         cap = int(max_seconds or self.timeout)
         timeout = min(int(timeout_seconds or cap), cap)
-        env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}
+        env = scrub_env(os.environ)
         env.update(extra_env or {})
         if self.mode == "docker":
             argv = ["docker", "run", "--rm", "-v", f"{self.root}:/work", "-w", "/work"]

@@ -1,0 +1,572 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Ramch16/vittics-builder/docs/research/run-record.schema.json",
+  "title": "Vittics Builder benchmark run record, schema version 2 (DRAFT, not approved for experiments)",
+  "description": "One run of one task under one condition. Unknown values are null, never zero. Validated by vittics_builder.benchmarks.validate_record, which supports the keywords used here: type, required, properties, additionalProperties, items, enum, const, minimum, minLength, pattern, format (date-time, date).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "data_kind",
+    "experiment_id",
+    "run_id",
+    "task_id",
+    "condition",
+    "repeat",
+    "source",
+    "hashes",
+    "engine",
+    "environment_ref",
+    "started_at",
+    "ended_at",
+    "terminal_status",
+    "blocker",
+    "acceptance",
+    "caps",
+    "retries",
+    "human_interventions",
+    "usage",
+    "cost",
+    "timing",
+    "artifacts",
+    "ai_assistance",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "data_kind": {
+      "enum": [
+        "observed",
+        "synthetic",
+        "synthetic-mock"
+      ],
+      "description": "synthetic = invented to test the pipeline; synthetic-mock = produced by MockProvider; observed = a real-provider run"
+    },
+    "experiment_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "condition": {
+      "enum": [
+        "multi_agent",
+        "single_agent"
+      ]
+    },
+    "repeat": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness_commit",
+        "starter_tree_sha256"
+      ],
+      "properties": {
+        "harness_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "starter_tree_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "prompt",
+        "oracle",
+        "config"
+      ],
+      "properties": {
+        "task": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "prompt": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "oracle": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "model",
+        "model_version",
+        "engine",
+        "engine_version"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "model_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "as reported by the provider response, if any"
+        },
+        "engine": {
+          "type": "string",
+          "description": "api, cli:<name>, or mock"
+        },
+        "engine_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "environment_ref": {
+      "type": "string",
+      "description": "capture_id of the evidence manifest describing the machine"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "null for an incomplete run"
+    },
+    "terminal_status": {
+      "enum": [
+        "accepted",
+        "rejected",
+        "failed",
+        "blocked",
+        "timeout",
+        "provider_unavailable",
+        "incomplete"
+      ]
+    },
+    "blocker": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checks",
+        "all_passed",
+        "release_outcome",
+        "oracle"
+      ],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "passed"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "passed": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "all_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "independent oracle result; true only if checks is nonempty and every check passed; null if the oracle did not run"
+        },
+        "release_outcome": {
+          "enum": [
+            "released",
+            "release_blocked",
+            "not_reached",
+            "unknown"
+          ]
+        },
+        "oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "evaluated_tree",
+            "run_ref"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "independent_hidden",
+                "product_checks",
+                "none"
+              ],
+              "description": "independent_hidden = the frozen oracle kept outside both conditions' workspaces; only it can make a run accepted"
+            },
+            "evaluated_tree": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{40}$",
+              "description": "git tree SHA of the final workspace the oracle evaluated"
+            },
+            "run_ref": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "identifier of the oracle execution log (e.g. artifact path or capture step)"
+            }
+          }
+        }
+      }
+    },
+    "retries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "builder_rework",
+        "reviewer_retry",
+        "infrastructure_retry"
+      ],
+      "properties": {
+        "builder_rework": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reviewer_retry": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "infrastructure_retry": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "human_interventions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "role",
+          "at",
+          "minutes"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "approval",
+              "rejection",
+              "steer",
+              "unblock",
+              "override",
+              "other"
+            ]
+          },
+          "role": {
+            "enum": [
+              "ceo",
+              "cto",
+              "operator"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "minutes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens"
+      ],
+      "properties": {
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cache_read_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cache_write_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "description": "totals across every agent, retry and engine in the run; null when any component is unknown"
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount",
+        "currency",
+        "basis",
+        "price_source",
+        "price_source_date"
+      ],
+      "properties": {
+        "amount": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "null when basis is unknown or subscription_unpriced"
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z]{3}$"
+        },
+        "basis": {
+          "enum": [
+            "billed",
+            "estimated",
+            "subscription_unpriced",
+            "unknown"
+          ]
+        },
+        "price_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "price_source_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wall_seconds",
+        "active_union_seconds",
+        "summed_agent_seconds",
+        "waits"
+      ],
+      "properties": {
+        "wall_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "active_union_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "summed_agent_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "waits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "human",
+            "provider_unavailable",
+            "infrastructure",
+            "unclassified"
+          ],
+          "properties": {
+            "human": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "provider_unavailable": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "infrastructure": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "unclassified": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "ai_assistance": {
+      "type": "string",
+      "description": "what AI produced or operated in this run and its records"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "caps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_total_tokens",
+        "max_wall_seconds",
+        "max_cost"
+      ],
+      "description": "per-run caps, identical across conditions; totals count every agent and every retry in the run",
+      "properties": {
+        "max_total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "max_wall_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "max_cost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

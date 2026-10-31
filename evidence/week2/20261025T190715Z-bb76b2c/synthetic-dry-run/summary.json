@@ -1,0 +1,99 @@
+{
+  "by_condition": {
+    "multi_agent": {
+      "acceptance_rate": 0.6666666666666666,
+      "accepted_runs": 4,
+      "conditional_release_rate": 1.0,
+      "cost_per_accepted_run": null,
+      "currencies": [
+        "USD"
+      ],
+      "human_minutes": 12,
+      "incomplete_runs": 1,
+      "input_tokens": null,
+      "output_tokens": null,
+      "release_and_oracle_success_rate": 0.6666666666666666,
+      "runs": 6,
+      "runs_reaching_release_gate": 4,
+      "tasks": 3,
+      "terminal_statuses": {
+        "accepted": 4,
+        "failed": 1,
+        "incomplete": 1
+      },
+      "total_cost": null,
+      "unknown_cost_runs": 1
+    },
+    "single_agent": {
+      "acceptance_rate": 0.0,
+      "accepted_runs": 0,
+      "conditional_release_rate": 0.0,
+      "cost_per_accepted_run": null,
+      "currencies": [
+        "USD"
+      ],
+      "human_minutes": 12,
+      "incomplete_runs": 0,
+      "input_tokens": 6000,
+      "output_tokens": 1200,
+      "release_and_oracle_success_rate": 0.0,
+      "runs": 6,
+      "runs_reaching_release_gate": 2,
+      "tasks": 3,
+      "terminal_statuses": {
+        "failed": 1,
+        "provider_unavailable": 1,
+        "rejected": 3,
+        "timeout": 1
+      },
+      "total_cost": 3.0,
+      "unknown_cost_runs": 0
+    }
+  },
+  "data_kinds": [
+    "synthetic"
+  ],
+  "limitations": [
+    "Exploratory: no significance test; repeats are clustered by task.",
+    "Synthetic or mock records say nothing about real performance."
+  ],
+  "paired_summary": {
+    "max_difference": 1.0,
+    "median_difference": 0.5,
+    "min_difference": 0.5,
+    "tasks": 3
+  },
+  "schema_version": 1,
+  "task_paired": [
+    {
+      "difference": 1.0,
+      "multi_agent_rate": 1.0,
+      "repeats": {
+        "multi_agent": 2,
+        "single_agent": 2
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T1"
+    },
+    {
+      "difference": 0.5,
+      "multi_agent_rate": 0.5,
+      "repeats": {
+        "multi_agent": 2,
+        "single_agent": 2
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T2"
+    },
+    {
+      "difference": 0.5,
+      "multi_agent_rate": 0.5,
+      "repeats": {
+        "multi_agent": 2,
+        "single_agent": 2
+      },
+      "single_agent_rate": 0.0,
+      "task_id": "T3"
+    }
+  ]
+}

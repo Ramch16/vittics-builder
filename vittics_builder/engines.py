@@ -160,10 +160,9 @@ def engine_env(engine: dict, base=None) -> dict[str, str]:
     commands never see: API keys, the CEO and CTO tokens, cloud credentials) except those the engine signs in
     with, `env_keep` (exact names or shell-style patterns such as "*_API_KEY"). A subscription engine never gets
     ANTHROPIC_API_KEY, even if kept, so it bills its own login. The engine's own `env` is applied last."""
-    from .tools import SECRET_ENV
+    from .tools import scrub_env
     keep = [str(p) for p in engine.get("env_keep") or []]
-    env = {k: v for k, v in (os.environ if base is None else base).items()
-           if not SECRET_ENV.search(k) or any(fnmatchcase(k, p) for p in keep)}
+    env = scrub_env(os.environ if base is None else base, lambda name: any(fnmatchcase(name, p) for p in keep))
     if engine.get("subscription"):
         env.pop("ANTHROPIC_API_KEY", None)
     env.update(engine.get("env") or {})

@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "outputs": {
+    "synthetic-dry-run/invalid-variants.json": "0ca850637fac5b09a3f8aed53744dca604c189e216795537fcca83bedb24608d",
+    "synthetic-dry-run/records.jsonl": "925efa3296503dc2ad61ee6d38bcc0f96e885d54dabadf44dc3954e908727b8a",
+    "synthetic-dry-run/semantics.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "synthetic-dry-run/summary.json": "9e1d65c4de30994eafb4810a145851c691ed631faeea06b3ed2c00540a9a4a10",
+    "synthetic-dry-run/validation.json": "7185f6328231fb8327413d0b02e7ab900ca64f82f4644c2d0654162ea81ff0dc"
+  },
+  "capture_id": "20261025T190715Z-bb76b2c",
+  "data_kind": "observed",
+  "label": "Week 2 result: research/week2-readiness commit, clean tree; Week 1 tip f5fd58c restored from verified bundle",
+  "captured_at": "2026-10-25T19:13:12Z",
+  "provider": "mock (VITTICS_PROVIDER=mock; secret-named variables removed)",
+  "source": {
+    "remote": "https://github.com/Ramch16/vittics-builder",
+    "head": "bb76b2c2b467e084ea58cdfa9b8761371208ab65",
+    "tree": "6744bf4d00dd382e69d20f2f20476f0fb200cd4f",
+    "branch": "research/week2-readiness",
+    "dirty_paths": [],
+    "dirty": false,
+    "audited_head": "89694d5142ddf2fe5055643c306b683c67665026",
+    "audited_head_matches": false,
+    "changed_since_audit": [
+      " 54 files changed, 4681 insertions(+), 25 deletions(-)"
+    ]
+  },
+  "environment": {
+    "os": "Linux-6.18.44-fc-v153-x86_64-with-glibc2.39",
+    "system": "Linux",
+    "machine": "x86_64",
+    "versions": {
+      "git": "git version 2.43.0",
+      "node": "v22.23.4"
+    }
+  },
+  "steps": [
+    {
+      "name": "suite",
+      "command": "/tmp/claude-0/w2-venv/bin/python -m pytest -q -rs -rxX -p no:cacheprovider",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T19:07:15Z",
+      "ended_at": "2026-10-25T19:12:36Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {
+        "passed": 404,
+        "skipped": 8,
+        "xfailed": 12
+      },
+      "log": "suite.log",
+      "log_sha256": "b4596ed42870fd958d9de1b2c44252c23c1a17ceff70e1831f2119e3eda9ee93"
+    },
+    {
+      "name": "browser-subset",
+      "command": "/tmp/claude-0/w2-browser/bin/python -m pytest tests/test_dashboard_dialogs.py tests/test_integrations.py tests/test_company_os.py -q -rs -p no:cacheprovider",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "1.63.0",
+          "mcp": "not installed"
+        },
+        "chromium": "153.0.8010.12"
+      },
+      "started_at": "2026-10-25T19:12:36Z",
+      "ended_at": "2026-10-25T19:13:08Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {
+        "passed": 38,
+        "skipped": 1
+      },
+      "log": "browser-subset.log",
+      "log_sha256": "129982df849553b495d7c38f1261a67d78e5ead1d87ed2456c2ef228c7df31c3"
+    },
+    {
+      "name": "synthetic-dry-run",
+      "command": "/tmp/claude-0/w2-venv/bin/python scripts/synthetic_dry_run.py --out evidence/week2/20261025T190715Z-bb76b2c/synthetic-dry-run",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T19:13:08Z",
+      "ended_at": "2026-10-25T19:13:08Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "synthetic-dry-run.log",
+      "log_sha256": "964ca5db0334fcea5bbd13692954711755fc55b5a687c20f9a928167fa7f36c0"
+    },
+    {
+      "name": "deps-snapshot",
+      "command": "/tmp/claude-0/w2-venv/bin/python -m pip freeze --exclude-editable",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T19:13:08Z",
+      "ended_at": "2026-10-25T19:13:08Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "deps-snapshot.log",
+      "log_sha256": "5d0ce7f1993bea3bb0e719de24a12585223bff98d519398c7dd67be212269bef"
+    },
+    {
+      "name": "deps-snapshot-browser",
+      "command": "/tmp/claude-0/w2-browser/bin/python -m pip freeze --exclude-editable",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "1.63.0",
+          "mcp": "not installed"
+        },
+        "chromium": "153.0.8010.12"
+      },
+      "started_at": "2026-10-25T19:13:08Z",
+      "ended_at": "2026-10-25T19:13:09Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "deps-snapshot-browser.log",
+      "log_sha256": "5abdaac0a7024f80180268609465493c5e558f96aa103a49ec650eda261006ae"
+    },
+    {
+      "name": "pip-audit-pypi",
+      "command": "/tmp/claude-0/audit-venv/bin/pip-audit -r /tmp/claude-0/w2-freeze.txt --no-deps --disable-pip --vulnerability-service pypi --format json",
+      "interpreter": null,
+      "started_at": "2026-10-25T19:13:09Z",
+      "ended_at": "2026-10-25T19:13:10Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "pip-audit-pypi.log",
+      "log_sha256": "c27c9ea629535ce8a3f2430008f8f9ec99104b349562898b9c6797a832a4363e"
+    },
+    {
+      "name": "pip-audit-pypi-browser",
+      "command": "/tmp/claude-0/audit-venv/bin/pip-audit -r /tmp/claude-0/w2-freeze-browser.txt --no-deps --disable-pip --vulnerability-service pypi --format json",
+      "interpreter": null,
+      "started_at": "2026-10-25T19:13:10Z",
+      "ended_at": "2026-10-25T19:13:11Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "pip-audit-pypi-browser.log",
+      "log_sha256": "6e0ff97af1f265a68a1875bff54f2d2bcccddba3ebf7147076de30ca45ab2018"
+    },
+    {
+      "name": "pip-audit-osv",
+      "command": "/tmp/claude-0/audit-venv/bin/pip-audit -r /tmp/claude-0/w2-freeze.txt --no-deps --disable-pip --vulnerability-service osv --format json",
+      "interpreter": null,
+      "started_at": "2026-10-25T19:13:11Z",
+      "ended_at": "2026-10-25T19:13:11Z",
+      "exit_code": 1,
+      "status": "failed",
+      "counts": {},
+      "log": "pip-audit-osv.log",
+      "log_sha256": "658e8c0d06a8d4283d6da0192709a632dde87b0b0c314cb44cfcccbc4700ec21"
+    },
+    {
+      "name": "npm-audit",
+      "command": "npm audit --package-lock-only --prefix desktop --json",
+      "interpreter": null,
+      "started_at": "2026-10-25T19:13:11Z",
+      "ended_at": "2026-10-25T19:13:12Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "npm-audit.log",
+      "log_sha256": "bbd5a880728e6f4747129ea8c10cac67cbe410e6ecbcf5a34f598286c5995401"
+    }
+  ],
+  "limitations": [
+    "Counts are parsed from each log's last pytest summary line; the log is authoritative.",
+    "A passing mock run exercises orchestration, not AI coding quality."
+  ]
+}
