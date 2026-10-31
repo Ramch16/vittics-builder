@@ -35,3 +35,18 @@ def test_secrets_are_not_passed_to_commands(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
     ws = Workspace(tmp_path / "ws")
     assert "sk-secret" not in ws.run_command("env")
+
+
+def test_git_config_environment_is_scrubbed_as_a_set(tmp_path, monkeypatch):
+    """GIT_CONFIG_KEY_<n> matches the secret-name filter. Dropping it while keeping GIT_CONFIG_COUNT broke every git
+    command an agent ran ("missing config key"); a value may also carry credentials, so the set goes together."""
+    from vittics_builder.tools import scrub_env
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "http.extraHeader")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "Authorization: Bearer fake-git-token")
+    ws = Workspace(tmp_path / "ws")
+    ws.init_repo()
+    out = ws.run_command("git status --short && env")
+    assert out.startswith("exit code 0") and "fake-git-token" not in out and "GIT_CONFIG_COUNT" not in out
+    assert scrub_env({"GIT_CONFIG_GLOBAL": "/g", "GIT_CONFIG_KEY_0": "k", "GIT_CONFIG_COUNT": "1"}) == {"GIT_CONFIG_GLOBAL": "/g"}
+    assert scrub_env({"PATH": "/bin", "GIT_CONFIG_COUNT": "0"}) == {"PATH": "/bin", "GIT_CONFIG_COUNT": "0"}

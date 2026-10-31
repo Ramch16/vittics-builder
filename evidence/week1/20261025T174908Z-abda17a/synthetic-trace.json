@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "data_kind": "synthetic-mock",
+  "brief": "A small Python library with a core module and a supporting module, each with unit tests.",
+  "python": "3.13.17",
+  "final_stage": "done",
+  "gates": [
+    {
+      "approval_id": 1,
+      "kind": "prd",
+      "required_role": "ceo",
+      "stage_before": "prd_approval",
+      "stage_after": "architecture_approval",
+      "decided_by_script": true
+    },
+    {
+      "approval_id": 2,
+      "kind": "architecture",
+      "required_role": "cto",
+      "stage_before": "architecture_approval",
+      "stage_after": "release_approval",
+      "decided_by_script": true
+    },
+    {
+      "approval_id": 3,
+      "kind": "release",
+      "required_role": "cto",
+      "stage_before": "release_approval",
+      "stage_after": "signoff",
+      "decided_by_script": true
+    },
+    {
+      "approval_id": 4,
+      "kind": "signoff",
+      "required_role": "ceo",
+      "stage_before": "signoff",
+      "stage_after": "done",
+      "decided_by_script": true
+    }
+  ],
+  "approvals": [
+    {
+      "id": 1,
+      "kind": "prd",
+      "required_role": "ceo",
+      "status": "approved",
+      "decided_by": "Niki"
+    },
+    {
+      "id": 2,
+      "kind": "architecture",
+      "required_role": "cto",
+      "status": "approved",
+      "decided_by": "Lucky"
+    },
+    {
+      "id": 3,
+      "kind": "release",
+      "required_role": "cto",
+      "status": "approved",
+      "decided_by": "Lucky"
+    },
+    {
+      "id": 4,
+      "kind": "signoff",
+      "required_role": "ceo",
+      "status": "approved",
+      "decided_by": "Niki"
+    }
+  ],
+  "release_approval_payload": {
+    "verified_head": "c80adcc340ce1e4df9decd0dc05db258df54d854",
+    "ledger_id": 2,
+    "inconclusive": []
+  },
+  "verification_ledger": [
+    {
+      "ledger_id": 1,
+      "source_commit": "5c2483380de5053f4bf14415899a22845545863f",
+      "passed": true,
+      "release_eligible": true,
+      "coverage": "legacy-unmapped",
+      "requirements": [],
+      "checks": [
+        {
+          "id": "unit-tests",
+          "passed": true
+        },
+        {
+          "id": "core-flow",
+          "passed": true
+        }
+      ],
+      "errors": [],
+      "contract_sha256": "da385067233f212f5a1931c5618b8b9a045f32db04270fccf29fdb8845b6a15d",
+      "source_sha256": "7d2e5e24dfd9c65890cb2512e6e9a6eb1f6642407a9c1d6836558b3a59c83c33",
+      "verifier_sha256": "0131866e6992622aacbe63ba154d441b03936fd95f0429def8e39d946e3d222b"
+    },
+    {
+      "ledger_id": 2,
+      "source_commit": "39c417a095cfa3e313537e679327e70c439f6369",
+      "passed": true,
+      "release_eligible": true,
+      "coverage": "legacy-unmapped",
+      "requirements": [],
+      "checks": [
+        {
+          "id": "unit-tests",
+          "passed": true
+        },
+        {
+          "id": "core-flow",
+          "passed": true
+        }
+      ],
+      "errors": [],
+      "contract_sha256": "da385067233f212f5a1931c5618b8b9a045f32db04270fccf29fdb8845b6a15d",
+      "source_sha256": "f2d1a572e10168ac542f04bfabb93f6eb76c92616bd16e2ae0e60143d0f2212f",
+      "verifier_sha256": "0131866e6992622aacbe63ba154d441b03936fd95f0429def8e39d946e3d222b"
+    }
+  ],
+  "release_tag": "e543251552c3a33af516330c19132058bee64c8d",
+  "release_tree_matches_verified_tree": true,
+  "export": {
+    "sha256": "ec0073d3a85f0dc4139b7645b99babe6463a27c23c838e2ec82acfa725165650",
+    "files": [
+      ".gitignore",
+      "BRIEF.md",
+      "README.md",
+      "docs/",
+      "docs/ARCHITECTURE.md",
+      "docs/DESIGN.md",
+      "docs/OPERATIONS.md",
+      "docs/PRD.md",
+      "docs/QA_REPORT.md",
+      "docs/VERIFICATION.json",
+      "docs/audits/",
+      "docs/audits/compliance_officer.md",
+      "docs/audits/performance_engineer.md",
+      "docs/audits/security_auditor.md",
+      "product.json",
+      "src/",
+      "src/core.py",
+      "src/extras.py",
+      "src/t_6.py",
+      "tests/",
+      "tests/test_core.py",
+      "tests/test_extras.py",
+      "tests/test_t_6.py"
+    ],
+    "contains_verification_report": true
+  },
+  "release_gate_seen": true,
+  "limitations": [
+    "MockProvider scripts every agent; no AI coding quality is exercised.",
+    "Gates were approved by this script standing in for the CEO and CTO.",
+    "Timestamps and commit SHAs differ on every run."
+  ]
+}

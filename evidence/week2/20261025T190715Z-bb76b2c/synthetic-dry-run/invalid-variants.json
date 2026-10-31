@@ -1,0 +1,73 @@
+[
+  {
+    "expected_rule": "accepted-needs-independent-oracle",
+    "reported_rules": [
+      "accepted-needs-independent-oracle"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "accepted-needs-independent-oracle",
+    "reported_rules": [
+      "accepted-needs-independent-oracle",
+      "all-passed-consistent"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "all-passed-consistent",
+    "reported_rules": [
+      "all-passed-consistent"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "end-after-start",
+    "reported_rules": [
+      "end-after-start"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "incomplete-has-no-end",
+    "reported_rules": [
+      "incomplete-has-no-end"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "unknown-cost-is-null",
+    "reported_rules": [
+      "unknown-cost-is-null"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "known-cost-complete",
+    "reported_rules": [
+      "known-cost-complete"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "caps-enforced",
+    "reported_rules": [
+      "caps-enforced"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "oracle-references",
+    "reported_rules": [
+      "oracle-references"
+    ],
+    "caught": true
+  },
+  {
+    "expected_rule": "unique-run-id",
+    "reported_rules": [
+      "unique-run-id"
+    ],
+    "caught": true
+  }
+]

@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "capture_id": "20261025T173648Z-f01a108",
+  "data_kind": "observed",
+  "label": "baseline: main f01a108 code, before research changes (scripts/ untracked)",
+  "captured_at": "2026-10-25T17:42:43Z",
+  "provider": "mock (VITTICS_PROVIDER=mock; secret-named variables removed)",
+  "source": {
+    "remote": "https://github.com/Ramch16/vittics-builder",
+    "head": "f01a108efddd741c9a4f1f6b62bb84215ef333aa",
+    "tree": "ed1c7e1d1b45aec03fc247415e72b32cc0239cd5",
+    "branch": "research/week1-evidence",
+    "dirty_paths": [
+      "scripts/"
+    ],
+    "dirty": true,
+    "audited_head": "89694d5142ddf2fe5055643c306b683c67665026",
+    "audited_head_matches": false,
+    "changed_since_audit": [
+      " 12 files changed, 302 insertions(+), 23 deletions(-)"
+    ]
+  },
+  "environment": {
+    "os": "Linux-6.18.44-fc-v153-x86_64-with-glibc2.39",
+    "system": "Linux",
+    "machine": "x86_64",
+    "versions": {
+      "git": "git version 2.43.0",
+      "node": "v22.23.4"
+    }
+  },
+  "steps": [
+    {
+      "name": "suite",
+      "command": "/tmp/claude-0/vb-venv/bin/python -m pytest -q -rs -p no:cacheprovider",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T17:36:48Z",
+      "ended_at": "2026-10-25T17:42:09Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {
+        "passed": 376,
+        "skipped": 8,
+        "xfailed": 5
+      },
+      "log": "suite.log",
+      "log_sha256": "635e38a53119173152bed304dfbbb73234849fdae98c2e3cb7299121eaa0fefb"
+    },
+    {
+      "name": "browser-subset",
+      "command": "/tmp/claude-0/vb-browser/bin/python -m pytest tests/test_dashboard_dialogs.py tests/test_integrations.py tests/test_company_os.py -q -rs -p no:cacheprovider",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.7.0",
+          "pydantic": "2.13.5",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "1.63.0",
+          "mcp": "2.3.0"
+        },
+        "chromium": "153.0.8010.12"
+      },
+      "started_at": "2026-10-25T17:42:09Z",
+      "ended_at": "2026-10-25T17:42:40Z",
+      "exit_code": 1,
+      "status": "failed",
+      "counts": {
+        "failed": 1,
+        "passed": 38
+      },
+      "log": "browser-subset.log",
+      "log_sha256": "7a5d4f5e84d5c9c8b3eee7e4e8d532b306493b6c156c77d16df95e625ec52cc2"
+    },
+    {
+      "name": "synthetic-trace",
+      "command": "/tmp/claude-0/vb-venv/bin/python scripts/trace_synthetic_brief.py --out /tmp/claude-0/trace-baseline.json",
+      "interpreter": {
+        "packages": {
+          "python": "3.13.17",
+          "vittics-builder": "0.26.0",
+          "pyyaml": "6.0.3",
+          "anthropic": "2.3.0",
+          "fastapi": "0.162.0",
+          "uvicorn": "0.54.0",
+          "starlette": "1.10.0",
+          "pydantic": "2.14.1",
+          "pytest": "9.1.1",
+          "httpx": "0.28.1",
+          "playwright": "not installed",
+          "mcp": "not installed"
+        },
+        "chromium": "unavailable"
+      },
+      "started_at": "2026-10-25T17:42:40Z",
+      "ended_at": "2026-10-25T17:42:43Z",
+      "exit_code": 0,
+      "status": "passed",
+      "counts": {},
+      "log": "synthetic-trace.log",
+      "log_sha256": "68ea5d5f4ec0b15669e4f030fa1f4839851edbfa1ab19e8cdb9a6fb8950b992d"
+    }
+  ],
+  "limitations": [
+    "Counts are parsed from each log's last pytest summary line; the log is authoritative.",
+    "A passing mock run exercises orchestration, not AI coding quality."
+  ]
+}

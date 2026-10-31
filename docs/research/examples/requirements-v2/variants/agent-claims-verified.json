@@ -1,0 +1,108 @@
+{
+  "schema_version": 2,
+  "name": "Leave Ledger (synthetic example)",
+  "setup": "Python 3.11+; pip install -e . (planned)",
+  "run": "python -m leave_ledger --help (planned)",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "description": "An employee can submit a leave request with start date, end date and type; the request is stored with status 'pending'.",
+      "risk": "medium",
+      "required_checks": [
+        "submit-request"
+      ],
+      "status": "verified"
+    },
+    {
+      "id": "REQ-002",
+      "description": "A request whose end date is before its start date is rejected with a clear error and nothing is stored.",
+      "risk": "medium",
+      "required_checks": [
+        "reject-invalid-dates"
+      ],
+      "status": "verified"
+    },
+    {
+      "id": "REQ-003",
+      "description": "A manager can approve or reject a pending request; an already decided request cannot be decided again.",
+      "risk": "high",
+      "required_checks": [
+        "decide-request",
+        "no-double-decision"
+      ],
+      "status": "verified"
+    },
+    {
+      "id": "REQ-004",
+      "description": "An employee's remaining balance decreases by the working days of each approved request and never below zero.",
+      "risk": "high",
+      "required_checks": [
+        "balance-arithmetic",
+        "balance-floor"
+      ],
+      "status": "verified"
+    },
+    {
+      "id": "REQ-005",
+      "description": "Only a manager of the employee's team can decide that employee's requests.",
+      "risk": "high",
+      "required_checks": [
+        "decide-request",
+        "manager-scope"
+      ],
+      "status": "verified"
+    },
+    {
+      "id": "REQ-006",
+      "description": "Data written by one run is read back unchanged by the next run (persistence across restarts).",
+      "risk": "medium",
+      "required_checks": [
+        "persistence-roundtrip"
+      ],
+      "status": "verified"
+    }
+  ],
+  "checks": [
+    {
+      "id": "submit-request",
+      "requirement": "REQ-001: submit and store a pending request",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_submit.py -q"
+    },
+    {
+      "id": "reject-invalid-dates",
+      "requirement": "REQ-002: end before start is rejected and not stored",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_dates.py -q"
+    },
+    {
+      "id": "decide-request",
+      "requirement": "REQ-003/REQ-005: manager decision changes status once",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_decide.py -q"
+    },
+    {
+      "id": "no-double-decision",
+      "requirement": "REQ-003: a decided request cannot be decided again",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_decide.py -q -k double"
+    },
+    {
+      "id": "balance-arithmetic",
+      "requirement": "REQ-004: working-day arithmetic across weekends",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_balance.py -q"
+    },
+    {
+      "id": "balance-floor",
+      "requirement": "REQ-004: balance never below zero",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_balance.py -q -k floor"
+    },
+    {
+      "id": "manager-scope",
+      "requirement": "REQ-005: a manager of another team is refused",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_scope.py -q"
+    },
+    {
+      "id": "persistence-roundtrip",
+      "requirement": "REQ-006: write in one process, read in another",
+      "command": "PLANNED-NOT-IMPLEMENTED: python -m pytest tests/test_persistence.py -q"
+    }
+  ],
+  "_variant_note": "ACCEPTED by read_contract, but requirement_results ignores the agent's 'status' and recomputes it from check outcomes."
+}

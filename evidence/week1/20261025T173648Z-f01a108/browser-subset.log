@@ -1,0 +1,147 @@
+..........F............................                                  [100%]
+=================================== FAILURES ===================================
+_________ test_real_mcp_stdio_discovery_call_and_environment_isolation _________
+  + Exception Group Traceback (most recent call last):
+  |   File "/home/claude/vittics-builder/vittics_builder/integrations.py", line 57, in call
+  |     return asyncio.run(asyncio.wait_for(self._mcp(config, name, args, ws),
+  |            ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |                                         timeout=min(120, self.s.command_timeout)))
+  |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/usr/local/lib/python3.13/asyncio/runners.py", line 196, in run
+  |     return runner.run(main)
+  |            ~~~~~~~~~~^^^^^^
+  |   File "/usr/local/lib/python3.13/asyncio/runners.py", line 119, in run
+  |     return self._loop.run_until_complete(task)
+  |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  |   File "/usr/local/lib/python3.13/asyncio/base_events.py", line 726, in run_until_complete
+  |     return future.result()
+  |            ~~~~~~~~~~~~~^^
+  |   File "/usr/local/lib/python3.13/asyncio/tasks.py", line 514, in wait_for
+  |     return await fut
+  |            ^^^^^^^^^
+  |   File "/home/claude/vittics-builder/vittics_builder/integrations.py", line 83, in _mcp
+  |     async with stdio_client(params, errlog=errlog) as (read, write):
+  |                ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/usr/local/lib/python3.13/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/usr/local/lib/python3.13/site-packages/mcp/client/stdio.py", line 201, in stdio_client
+  |     async with anyio.create_task_group() as tg:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "/usr/local/lib/python3.13/site-packages/anyio/_backends/_asyncio.py", line 847, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Exception Group Traceback (most recent call last):
+    |   File "/usr/local/lib/python3.13/site-packages/mcp/client/stdio.py", line 205, in stdio_client
+    |     yield read_stream, write_stream
+    |   File "/home/claude/vittics-builder/vittics_builder/integrations.py", line 84, in _mcp
+    |     async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=60)) as session:
+    |                ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/usr/local/lib/python3.13/site-packages/mcp/client/session.py", line 514, in __aexit__
+    |     result = await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/usr/local/lib/python3.13/site-packages/anyio/_backends/_asyncio.py", line 847, in __aexit__
+    |     raise BaseExceptionGroup(
+    |         "unhandled errors in a TaskGroup", self._exceptions
+    |     ) from None
+    | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+    +-+---------------- 1 ----------------
+      | Traceback (most recent call last):
+      |   File "/home/claude/vittics-builder/vittics_builder/integrations.py", line 85, in _mcp
+      |     await session.initialize()
+      |   File "/usr/local/lib/python3.13/site-packages/mcp/client/session.py", line 654, in initialize
+      |     result = await self.send_request(
+      |              ^^^^^^^^^^^^^^^^^^^^^^^^
+      |     ...<9 lines>...
+      |     )
+      |     ^
+      |   File "/usr/local/lib/python3.13/site-packages/mcp/client/session.py", line 586, in send_request
+      |     raw = await self._dispatcher.send_raw_request(method, data.get("params"), opts)
+      |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |   File "/usr/local/lib/python3.13/site-packages/mcp/shared/jsonrpc_dispatcher.py", line 414, in send_raw_request
+      |     clock.start()
+      |     ~~~~~~~~~~~^^
+      |   File "/usr/local/lib/python3.13/site-packages/mcp/shared/_request_clock.py", line 30, in start
+      |     self.resume()
+      |     ~~~~~~~~~~~^^
+      |   File "/usr/local/lib/python3.13/site-packages/mcp/shared/_request_clock.py", line 41, in resume
+      |     self._scope.deadline = anyio.current_time() + self._budget
+      |                            ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+      | TypeError: unsupported operand type(s) for +: 'float' and 'datetime.timedelta'
+      +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/claude/vittics-builder/tests/test_integrations.py", line 119, in test_real_mcp_stdio_discovery_call_and_environment_isolation
+    tools = json.loads(adapter.call('qa_engineer','mcp_list_tools',{'server':'example'},ws))
+                       ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/vittics-builder/vittics_builder/integrations.py", line 65, in call
+    raise ToolError(f'MCP operation failed ({type(exc).__name__}); check the configured server.') from exc
+vittics_builder.tools.ToolError: MCP operation failed (ExceptionGroup); check the configured server.
+
+The above exception was the direct cause of the following exception:
+
+co = <vittics_builder.company.Company object at 0x7ff2937c8050>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-14/test_real_mcp_stdio_discovery_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff293780750>
+
+    @pytest.mark.skipif(not importlib.util.find_spec('mcp'), reason='Optional MCP SDK not installed')
+    def test_real_mcp_stdio_discovery_call_and_environment_isolation(co, tmp_path, monkeypatch):
+        server = tmp_path / 'server.py'
+        server.write_text('''import os
+    from mcp.server.fastmcp import FastMCP
+    mcp = FastMCP("test company tools")
+    @mcp.tool()
+    def echo(message: str) -> dict:
+        return {"message": message, "secret_present": "TEST_PROVIDER_SECRET" in os.environ,
+                "allowed_present": "TEST_ALLOWED_TOKEN" in os.environ}
+    @mcp.tool()
+    def forbidden() -> str:
+        return "should not be offered"
+    mcp.run(transport="stdio")
+    ''')
+        monkeypatch.setenv('TEST_PROVIDER_SECRET','dummy-test-value')
+        monkeypatch.setenv('TEST_ALLOWED_TOKEN','dummy-test-value')
+        co.s.raw['tools'] = {'mcp': {'example': {'command':sys.executable,'args':[str(server)],
+                          'roles':['qa_engineer'],'tools':['echo'],'env_names':['TEST_ALLOWED_TOKEN']}}}
+        adapter = Integrations(co.s); ws = Workspace(tmp_path)
+>       tools = json.loads(adapter.call('qa_engineer','mcp_list_tools',{'server':'example'},ws))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_integrations.py:119: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <vittics_builder.integrations.Integrations object at 0x7ff2999dd480>
+role = 'qa_engineer', name = 'mcp_list_tools', args = {'server': 'example'}
+ws = <vittics_builder.tools.Workspace object at 0x7ff2937d2d70>
+
+    def call(self, role, name, args, ws):
+        if not self.allowed(role, name):
+            raise ToolError('This integration is not enabled for your role.')
+        if not ws:
+            raise ToolError('Integration tools require a project workspace.')
+        if name == 'browser_journey':
+            from .browser import journey
+            return journey(ws, (self.s.raw.get('tools') or {}).get('browser') or {}, args)
+        config = ((self.s.raw.get('tools') or {}).get('mcp') or {}).get(args.get('server'))
+        if not config or role not in (config.get('roles') or []):
+            raise ToolError('MCP server is not permitted for your role.')
+        if name == 'mcp_call' and args.get('tool') not in (config.get('tools') or []):
+            raise ToolError('MCP tool is not on the company allowlist.')
+        try:
+            return asyncio.run(asyncio.wait_for(self._mcp(config, name, args, ws),
+                                                timeout=min(120, self.s.command_timeout)))
+        except ImportError as exc:
+            raise ToolError('MCP support needs pip install -e ".[mcp]".') from exc
+        except ToolError:
+            raise
+        except Exception as exc:
+            # A server exception can contain credential values; never relay it to an agent.
+>           raise ToolError(f'MCP operation failed ({type(exc).__name__}); check the configured server.') from exc
+E           vittics_builder.tools.ToolError: MCP operation failed (ExceptionGroup); check the configured server.
+
+vittics_builder/integrations.py:65: ToolError
+1 failed, 38 passed in 29.66s

@@ -95,3 +95,183 @@ def _snapshot(db, project_id, cutoff):
                     'Tracker completion does not establish independent acceptance or release success.']}
     finally:
         db.conn.execute('RELEASE benchmark_snapshot')
+
+
+# ---- run records (docs/research/run-record.schema.json; DRAFT, not approved for experiments) ----------------
+SCHEMA_PATH = 'docs/research/run-record.schema.json'
+_TYPES = {'object': dict, 'array': list, 'string': str, 'boolean': bool, 'null': type(None)}
+
+
+def _is(value, kind):
+    if kind == 'integer':
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind == 'number':
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, _TYPES[kind])
+
+
+def validate_record(record, schema, path='$'):
+    """Errors (a list of strings, empty when valid) for `record` against the keywords the run-record schema
+    uses: type, required, properties, additionalProperties, items, enum, const, minimum, minLength, pattern
+    and format (date-time, date). Not a general JSON Schema validator; anything else raises."""
+    import re as _re
+    known = {'$schema', '$id', 'title', 'description', 'type', 'required', 'properties', 'additionalProperties',
+             'items', 'enum', 'const', 'minimum', 'minLength', 'pattern', 'format'}
+    if set(schema) - known:
+        raise ValueError(f'{path}: unsupported schema keywords {sorted(set(schema) - known)}')
+    errors = []
+    if 'const' in schema and record != schema['const']:
+        return [f'{path}: must be {schema["const"]!r}']
+    if 'enum' in schema and record not in schema['enum']:
+        return [f'{path}: {record!r} is not one of {schema["enum"]}']
+    kinds = schema.get('type')
+    if kinds is not None:
+        kinds = [kinds] if isinstance(kinds, str) else kinds
+        if not any(_is(record, k) for k in kinds):
+            return [f'{path}: expected {"/".join(kinds)}, got {type(record).__name__}']
+    if record is None:
+        return errors
+    if isinstance(record, str):
+        if len(record) < schema.get('minLength', 0):
+            errors.append(f'{path}: too short')
+        if 'pattern' in schema and not _re.search(schema['pattern'], record):
+            errors.append(f'{path}: does not match {schema["pattern"]}')
+        fmt = schema.get('format')
+        try:
+            if fmt == 'date-time':
+                instant(record.replace('Z', '+00:00'))
+            elif fmt == 'date':
+                datetime.strptime(record, '%Y-%m-%d')
+        except ValueError:
+            errors.append(f'{path}: not a valid {fmt} with timezone')
+    if 'minimum' in schema and _is(record, 'number') and record < schema['minimum']:
+        errors.append(f'{path}: below {schema["minimum"]}')
+    if isinstance(record, dict):
+        for key in schema.get('required', []):
+            if key not in record:
+                errors.append(f'{path}: missing {key}')
+        props = schema.get('properties', {})
+        for key, value in record.items():
+            if key in props:
+                errors += validate_record(value, props[key], f'{path}.{key}')
+            elif schema.get('additionalProperties') is False:
+                errors.append(f'{path}: unexpected field {key}')
+    if isinstance(record, list) and 'items' in schema:
+        for i, item in enumerate(record):
+            errors += validate_record(item, schema['items'], f'{path}[{i}]')
+    return errors
+
+
+def _total(values):
+    """Sum, or None if any value is unknown: unknown is never treated as zero."""
+    values = list(values)
+    return None if any(v is None for v in values) else sum(values)
+
+
+def _accepted(record):
+    """A run counts as accepted only when its status says so AND the independent hidden oracle ran on an evaluated
+    tree with a nonempty, all-passing set of checks. A status alone never counts."""
+    acc = record['acceptance']
+    oracle = acc.get('oracle') or {}
+    return (record['terminal_status'] == 'accepted' and oracle.get('kind') == 'independent_hidden'
+            and bool(oracle.get('evaluated_tree')) and bool(acc['checks'])
+            and all(c['passed'] is True for c in acc['checks']) and acc['all_passed'] is True)
+
+
+def check_semantics(records):
+    """Consistency rules the JSON schema cannot express (benchmark-protocol-draft.md §7). Returns a list of
+    {"run_id", "rule", "detail"}; empty when every record is consistent. Run after validate_record."""
+    issues, seen = [], {}
+    def flag(r, rule, detail):
+        issues.append({'run_id': r.get('run_id'), 'rule': rule, 'detail': detail})
+    for r in records:
+        rid = r['run_id']
+        if rid in seen:
+            flag(r, 'unique-run-id', f'run_id also used by record {seen[rid]}')
+        seen.setdefault(rid, len(seen))
+        start, end = instant(r['started_at'].replace('Z', '+00:00')), r['ended_at']
+        if end is not None and instant(end.replace('Z', '+00:00')) < start:
+            flag(r, 'end-after-start', 'ended_at is before started_at')
+        if end is None and r['terminal_status'] != 'incomplete':
+            flag(r, 'incomplete-has-no-end', f"no ended_at but terminal_status is {r['terminal_status']}")
+        if end is not None and r['terminal_status'] == 'incomplete':
+            flag(r, 'incomplete-has-no-end', 'terminal_status incomplete but ended_at is set')
+        acc, checks = r['acceptance'], r['acceptance']['checks']
+        if r['terminal_status'] == 'accepted' and not _accepted(r):
+            flag(r, 'accepted-needs-independent-oracle',
+                 'accepted requires oracle kind independent_hidden, an evaluated tree and a nonempty all-passing oracle')
+        if acc['all_passed'] is True and (not checks or not all(c['passed'] is True for c in checks)):
+            flag(r, 'all-passed-consistent', 'all_passed is true but checks are empty or not all passed')
+        if acc['all_passed'] is False and checks and all(c['passed'] is True for c in checks):
+            flag(r, 'all-passed-consistent', 'all_passed is false but every check passed')
+        if acc['all_passed'] is not None and not (acc['oracle']['evaluated_tree'] and acc['oracle']['run_ref']):
+            flag(r, 'oracle-references', 'an oracle result needs the evaluated tree and the oracle run reference')
+        cost = r['cost']
+        if cost['basis'] in ('unknown', 'subscription_unpriced') and cost['amount'] is not None:
+            flag(r, 'unknown-cost-is-null', f"basis {cost['basis']} must have amount null, not {cost['amount']}")
+        if cost['basis'] in ('billed', 'estimated') and (cost['amount'] is None or not cost['currency']):
+            flag(r, 'known-cost-complete', 'billed or estimated cost needs an amount and a currency')
+        caps, usage, timing = r['caps'], r['usage'], r['timing']
+        tokens = None if usage['input_tokens'] is None or usage['output_tokens'] is None else usage['input_tokens'] + usage['output_tokens']
+        over = [name for name, used, cap in (('tokens', tokens, caps['max_total_tokens']),
+                                             ('wall seconds', timing['wall_seconds'], caps['max_wall_seconds']),
+                                             ('cost', cost['amount'], caps['max_cost']))
+                if cap is not None and used is not None and used > cap]
+        if over and r['terminal_status'] in ('accepted', 'rejected'):
+            flag(r, 'caps-enforced', f"over cap ({', '.join(over)}) yet ended as {r['terminal_status']}; expected failed or timeout")
+    return issues
+
+
+def summarize_records(records):
+    """Per-condition and task-paired summaries of validated run records (benchmark-protocol-draft.md §8–9).
+    Failed and incomplete runs count everywhere, including cost. Cost per accepted run is None when no run was
+    accepted or any cost is unknown. The unit of comparison is the task: repeats are averaged within a task."""
+    data_kinds = sorted({r['data_kind'] for r in records})
+    by_condition = {}
+    for condition in sorted({r['condition'] for r in records}):
+        runs = [r for r in records if r['condition'] == condition]
+        accepted = sum(_accepted(r) for r in runs)
+        reached = [r for r in runs if r['acceptance']['release_outcome'] in ('released', 'release_blocked')]
+        cost = _total(r['cost']['amount'] for r in runs)
+        released_and_accepted = sum(r['acceptance']['release_outcome'] == 'released' and _accepted(r) for r in runs)
+        by_condition[condition] = {
+            'runs': len(runs), 'tasks': len({r['task_id'] for r in runs}),
+            'accepted_runs': accepted, 'acceptance_rate': accepted / len(runs),
+            # Overall: released AND independently accepted, over every run started (failures included).
+            'release_and_oracle_success_rate': released_and_accepted / len(runs),
+            # Conditional: released among runs that reached a release decision; None if none reached it.
+            'conditional_release_rate': (sum(r['acceptance']['release_outcome'] == 'released' for r in reached) / len(reached)
+                                         if reached else None),
+            'runs_reaching_release_gate': len(reached),
+            'incomplete_runs': sum(r['ended_at'] is None for r in runs),
+            'terminal_statuses': {s: sum(r['terminal_status'] == s for r in runs)
+                                  for s in sorted({r['terminal_status'] for r in runs})},
+            'total_cost': cost, 'currencies': sorted({r['cost']['currency'] for r in runs if r['cost']['currency']}),
+            'unknown_cost_runs': sum(r['cost']['amount'] is None for r in runs),
+            'cost_per_accepted_run': cost / accepted if cost is not None and accepted else None,
+            'human_minutes': _total(i['minutes'] for r in runs for i in r['human_interventions']),
+            'input_tokens': _total(r['usage']['input_tokens'] for r in runs),
+            'output_tokens': _total(r['usage']['output_tokens'] for r in runs),
+        }
+    paired = []
+    for task in sorted({r['task_id'] for r in records}):
+        rates = {}
+        for condition in ('multi_agent', 'single_agent'):
+            runs = [r for r in records if r['task_id'] == task and r['condition'] == condition]
+            rates[condition] = (sum(_accepted(r) for r in runs) / len(runs), len(runs)) if runs else None
+        if rates['multi_agent'] and rates['single_agent']:
+            paired.append({'task_id': task, 'multi_agent_rate': rates['multi_agent'][0],
+                           'single_agent_rate': rates['single_agent'][0],
+                           'repeats': {'multi_agent': rates['multi_agent'][1], 'single_agent': rates['single_agent'][1]},
+                           'difference': rates['multi_agent'][0] - rates['single_agent'][0]})
+    diffs = sorted(p['difference'] for p in paired)
+    mid = len(diffs) // 2
+    return {'schema_version': 1, 'data_kinds': data_kinds, 'by_condition': by_condition, 'task_paired': paired,
+            'paired_summary': {'tasks': len(diffs),
+                               'median_difference': (diffs[mid] if len(diffs) % 2 else (diffs[mid - 1] + diffs[mid]) / 2)
+                               if diffs else None,
+                               'min_difference': diffs[0] if diffs else None,
+                               'max_difference': diffs[-1] if diffs else None},
+            'limitations': ['Exploratory: no significance test; repeats are clustered by task.',
+                            'Synthetic or mock records say nothing about real performance.'
+                            if any(k != 'observed' for k in data_kinds) else 'Pilot sample; see the protocol.']}
