@@ -38,7 +38,9 @@ jobs:
           git config --global user.name "Vittics Builder CI"
           git config --global core.autocrlf false
       - name: Test (offline mock agents, no API key needed)
-        run: python -m pytest -q -p no:cacheprovider
+        run: |
+          pip install "pytest-github-actions-annotate-failures>=0.2"
+          python -m pytest -q -p no:cacheprovider -rfE
 
   dashboard-dialogs:
     runs-on: ubuntu-latest
