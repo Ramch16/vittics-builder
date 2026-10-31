@@ -71,9 +71,30 @@ def public_tests(ws) -> tuple[bool, str]:
     return out.splitlines()[0] == "exit code 0", out
 
 
-def run_slot(slot: dict, out_dir: Path, provider_factory) -> dict:
+def agent_timing(runs: list[dict], cutoff: str) -> dict:
+    """Summed agent seconds and the union of their active spans, from the product's run log (Week 5)."""
+    from vittics_builder.benchmarks import instant
+    end = instant(cutoff)
+    spans = sorted((instant(r["started_at"]), instant(r["ended_at"]) if r["ended_at"] else end) for r in runs)
+    summed = sum((b - a).total_seconds() for a, b in spans)
+    merged = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(b, merged[-1][1]))
+        else:
+            merged.append((a, b))
+    return {"summed_agent_seconds": round(summed, 3),
+            "active_union_seconds": round(sum((b - a).total_seconds() for a, b in merged), 3),
+            "agent_runs": len(runs)}
+
+
+def run_slot(slot: dict, out_dir: Path, provider_factory, caps: dict | None = None) -> dict:
+    """Run one slot. `caps` (max_total_tokens, max_cost, max_wall_seconds; None = no cap) are enforced across
+    every agent in the slot by vittics_builder.caps; the same caps apply to both conditions."""
+    from vittics_builder.caps import CapExceeded, RunCaps
     from vittics_builder.company import Company
     from vittics_builder.pipeline import PipelineError
+    caps = {"max_total_tokens": None, "max_cost": None, "max_wall_seconds": None, **(caps or {})}
     task_dir = oracle.task_dir(slot["task_id"])
     spec = (task_dir / "spec.md").read_text(encoding="utf-8")
     # Windows keeps company.db locked until the process lets go of it; leftover temp files are harmless.
@@ -83,6 +104,7 @@ def run_slot(slot: dict, out_dir: Path, provider_factory) -> dict:
         ws = co.pipeline.workspace(co.pipeline.project(p["id"]))
         seed_workspace(ws, task_dir)
         attempts_allowed = 1 + co.pipeline.max_rework(p["id"])
+        co.runtime.caps[p["id"]] = limiter = RunCaps(**caps)
         started, t0 = stamp(), time.monotonic()
         blocker, release, rework = None, "not_reached", 0
         status = "incomplete"
@@ -115,6 +137,10 @@ def run_slot(slot: dict, out_dir: Path, provider_factory) -> dict:
                 status = "completed"
         except PipelineError as exc:
             blocker, status, release = str(exc)[:500], "blocked", "release_blocked"
+        except CapExceeded as exc:
+            blocker, release = f"cap_exceeded:{exc.kind}: {exc}"[:500], "not_reached"
+            status = "timeout" if exc.kind == "wall" else "blocked"
+        cap_use = limiter.snapshot()
         wall = round(time.monotonic() - t0, 3)
         ended = stamp()
         result = oracle.evaluate(slot["task_id"], ws.root)
@@ -124,11 +150,14 @@ def run_slot(slot: dict, out_dir: Path, provider_factory) -> dict:
         usage = co.db.one("SELECT COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o, "
                           "COALESCE(SUM(cost),0) AS c, COALESCE(MIN(priced),1) AS priced, COUNT(*) AS n FROM usage "
                           "WHERE project_id=?", p["id"])
+        timing = agent_timing(co.db.all("SELECT started_at, ended_at FROM runs WHERE project_id=?", p["id"]), ended) \
+            if co.db.one("SELECT 1 FROM sqlite_master WHERE name='runs'") else \
+            {"summed_agent_seconds": None, "active_union_seconds": None, "agent_runs": None}
         reviews = co.db.one("SELECT COUNT(*) AS n FROM reviews WHERE project_id=?", p["id"])["n"] \
             if co.db.one("SELECT 1 FROM sqlite_master WHERE name='reviews'") else 0
     hashes = oracle.package_hashes(slot["task_id"])
     accepted = result["all_passed"] is True
-    terminal = ("blocked" if status == "blocked" else "accepted" if accepted else
+    terminal = (status if status in ("blocked", "timeout") else "accepted" if accepted else
                 "rejected" if status == "completed" else "failed")
     record = {
         "schema_version": 2, "data_kind": "synthetic-mock", "experiment_id": "mock-pilot-20261031",
@@ -143,19 +172,23 @@ def run_slot(slot: dict, out_dir: Path, provider_factory) -> dict:
                        "all_passed": result["all_passed"], "release_outcome": release,
                        "oracle": {"kind": "independent_hidden", "evaluated_tree": result["evaluated_tree_sha256"][:40],
                                   "run_ref": f"oracle/{slot['run_id']}.json"}},
-        "caps": {"max_total_tokens": None, "max_wall_seconds": None, "max_cost": None},
+        "caps": {"max_total_tokens": caps["max_total_tokens"], "max_wall_seconds": caps["max_wall_seconds"],
+                 "max_cost": caps["max_cost"]},
         "retries": {"builder_rework": rework, "reviewer_retry": 0, "infrastructure_retry": 0},
         "human_interventions": [],
         "usage": {"input_tokens": usage["i"], "output_tokens": usage["o"], "cache_read_tokens": None,
                   "cache_write_tokens": None},
         "cost": {"amount": 0.0, "currency": "USD", "basis": "billed", "price_source": "mock provider (no charge)",
                  "price_source_date": ended[:10]},
-        "timing": {"wall_seconds": wall, "active_union_seconds": None, "summed_agent_seconds": None,
+        "timing": {"wall_seconds": wall, "active_union_seconds": timing["active_union_seconds"],
+                   "summed_agent_seconds": timing["summed_agent_seconds"],
                    "waits": {"human": 0, "provider_unavailable": 0, "infrastructure": 0, "unclassified": None}},
         "artifacts": [{"path": f"oracle/{slot['run_id']}.json", "sha256": hashlib.sha256(log.read_bytes()).hexdigest()}],
         "ai_assistance": "Agents were the offline MockProvider (scripted, no model).",
         "limitations": ["MockProvider agents are scripted and do not attempt the task; this record tests the "
-                        "harness, not either condition.", f"independent reviews recorded: {reviews}"],
+                        "harness, not either condition.", f"independent reviews recorded: {reviews}",
+                        f"cap ledger: {cap_use['used_tokens']} tokens, {cap_use['used_cost']:.6f} estimated cost",
+                        f"agent runs: {timing['agent_runs']}; run-log timestamps have one-second resolution"],
     }
     return record
 
@@ -166,6 +199,9 @@ def main(argv=None) -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--slots", help="e.g. 1-4 (default: all)")
     ap.add_argument("--provider", default="mock", choices=["mock"])
+    ap.add_argument("--max-total-tokens", type=int)
+    ap.add_argument("--max-cost", type=float)
+    ap.add_argument("--max-wall-seconds", type=float)
     args = ap.parse_args(argv)
     from vittics_builder.llm import MockProvider
     schedule = json.loads(Path(args.schedule).read_text(encoding="utf-8"))
@@ -178,7 +214,9 @@ def main(argv=None) -> int:
     schema = json.loads((ROOT / SCHEMA_PATH).read_text(encoding="utf-8"))
     records = []
     for slot in slots:
-        records.append(run_slot(slot, out, MockProvider))
+        records.append(run_slot(slot, out, MockProvider, {"max_total_tokens": args.max_total_tokens,
+                                                          "max_cost": args.max_cost,
+                                                          "max_wall_seconds": args.max_wall_seconds}))
         print(f"slot {slot['slot']:>2} {slot['run_id']:<26} {records[-1]['terminal_status']}", flush=True)
     errors = {r["run_id"]: validate_record(r, schema) for r in records}
     semantics = check_semantics(records)

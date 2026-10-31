@@ -49,6 +49,7 @@ class AgentRuntime:
         self.nodes = None                   # worker machines (set by Company)
         self.vault = None                   # the project's keys: agents see names only (set by Company)
         self.integrations = None
+        self.caps: dict = {}                # project id -> caps.RunCaps (benchmark slots); empty = no hard caps
 
     def _system(self, agent: dict, role: dict, on_project: bool = False, chat_with: str | None = None,
                 extra: str = "") -> str:
@@ -208,10 +209,26 @@ class AgentRuntime:
 
         for turn in range(1, self.s.max_turns + 1):
             result.turns = turn
-            resp = self.provider.complete(model=agent["model"], system=self._system(agent, role, bool(project_id), chat_with, memories), messages=messages,
-                                          tools=tools, max_tokens=self.s.max_tokens, meta=meta)
-            record_usage(self.db, self.s, agent, project_id, resp.input_tokens, resp.output_tokens,
-                         meta.get("purpose") or ("chat" if chat_with else role["kind"]), run_id=meta.get('run_id'))
+            system = self._system(agent, role, bool(project_id), chat_with, memories)
+            caps, ticket = self.caps.get(project_id), None
+            if caps:
+                from .caps import estimate_input_tokens
+                from .costs import price
+                worst_in = estimate_input_tokens(system, messages, tools)
+                rate = price(self.s, agent["model"])
+                worst_cost = (worst_in * rate[0] + self.s.max_tokens * rate[1]) / 1_000_000 if rate else None
+                ticket = caps.admit(worst_in + self.s.max_tokens, worst_cost)     # raises CapExceeded
+            try:
+                resp = self.provider.complete(model=agent["model"], system=system, messages=messages,
+                                              tools=tools, max_tokens=self.s.max_tokens, meta=meta)
+            except BaseException:
+                if caps:
+                    caps.release(ticket)
+                raise
+            cost = record_usage(self.db, self.s, agent, project_id, resp.input_tokens, resp.output_tokens,
+                                meta.get("purpose") or ("chat" if chat_with else role["kind"]), run_id=meta.get('run_id'))
+            if caps:
+                caps.settle(ticket, resp.input_tokens + resp.output_tokens, cost)
 
             if resp.stop_reason == "max_tokens":
                 # A reply cut off mid-way may hold a half-written tool call. Drop it and ask for smaller steps.
@@ -292,6 +309,9 @@ class AgentRuntime:
                     self.db.log("machine", f"{exc}; {agent['name']} works on this computer meanwhile.",
                                 project_id, actor=agent["name"])
             if out is None:
+                if self.caps.get(project_id):
+                    self.caps[project_id].release(self.caps[project_id].admit(0, None, bounded=False))  # refuses
+                    # under token/cost caps; under a time cap alone it checks the clock and holds nothing
                 out = run_cli(engine, system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
                               write=can_write, run=can_run, timeout=self.s.cli_timeout)
         except EngineUnavailable as exc:      # a usage limit is nobody's failure: stop, don't score or rework
