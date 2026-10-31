@@ -7,13 +7,14 @@ Only synthetic projects, fake canary secrets and pytest's temporary folders are 
 import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
 from vittics_builder.engines import BUILTIN_ENGINES
 from vittics_builder.tools import ToolError, Workspace
 
-PY = sys.executable
+PY = Path(sys.executable).as_posix()      # forward slashes: commands run in Git Bash on Windows
 CANARY = "canary-FAKE-7f3a91"
 
 

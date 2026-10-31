@@ -66,7 +66,8 @@ def seed_workspace(ws, task_dir: Path) -> None:
 
 
 def public_tests(ws) -> tuple[bool, str]:
-    out = ws.run_command(f"{sys.executable} -m pytest -q -p no:cacheprovider tests", max_seconds=300)
+    python = Path(sys.executable).as_posix()          # forward slashes: commands run in Git Bash on Windows
+    out = ws.run_command(f'"{python}" -m pytest -q -p no:cacheprovider tests', max_seconds=300)
     return out.splitlines()[0] == "exit code 0", out
 
 
@@ -75,7 +76,8 @@ def run_slot(slot: dict, out_dir: Path, provider_factory) -> dict:
     from vittics_builder.pipeline import PipelineError
     task_dir = oracle.task_dir(slot["task_id"])
     spec = (task_dir / "spec.md").read_text(encoding="utf-8")
-    with tempfile.TemporaryDirectory(prefix=f"bench-{slot['run_id']}-") as tmp:
+    # Windows keeps company.db locked until the process lets go of it; leftover temp files are harmless.
+    with tempfile.TemporaryDirectory(prefix=f"bench-{slot['run_id']}-", ignore_cleanup_errors=True) as tmp:
         co = Company(Path(tmp), provider=provider_factory(), create=True)
         p = co.pipeline.create_project(task_dir.name, spec.splitlines()[0].lstrip("# "))
         ws = co.pipeline.workspace(co.pipeline.project(p["id"]))

@@ -40,7 +40,7 @@ def test_schedule_is_reproducible_and_counterbalanced():
             firsts.append(min(pair, key=lambda s: s["slot"])["condition"])
         assert len(set(firsts)) == 2                                            # each condition goes first once
     assert schedule.build(1) != a
-    with open("benchmark/schedule-20261031.json") as f:
+    with open("benchmark/schedule-20261031.json", encoding="utf-8") as f:
         assert json.load(f) == a                                                # the committed schedule is this one
 
 
@@ -50,7 +50,7 @@ def test_harness_writes_valid_mock_records(tmp_path, condition):
     from vittics_builder.llm import MockProvider
     record = run_slot({"slot": 1, "task_id": "T07", "repeat": 1, "condition": condition,
                        "run_id": f"T07-{condition}-r1"}, tmp_path, MockProvider)
-    schema = json.loads(open(SCHEMA_PATH).read())
+    schema = json.loads(open(SCHEMA_PATH, encoding="utf-8").read())
     assert validate_record(record, schema) == [] and check_semantics([record]) == []
     assert record["data_kind"] == "synthetic-mock" and record["acceptance"]["oracle"]["kind"] == "independent_hidden"
     assert (tmp_path / record["acceptance"]["oracle"]["run_ref"]).is_file()
