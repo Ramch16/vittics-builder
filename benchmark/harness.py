@@ -93,6 +93,7 @@ def run_slot(slot: dict, out_dir: Path, provider_factory, caps: dict | None = No
     every agent in the slot by vittics_builder.caps; the same caps apply to both conditions."""
     from vittics_builder.caps import CapExceeded, RunCaps
     from vittics_builder.company import Company
+    from vittics_builder.engines import EngineUnavailable
     from vittics_builder.pipeline import PipelineError
     caps = {"max_total_tokens": None, "max_cost": None, "max_wall_seconds": None, **(caps or {})}
     task_dir = oracle.task_dir(slot["task_id"])
@@ -140,6 +141,10 @@ def run_slot(slot: dict, out_dir: Path, provider_factory, caps: dict | None = No
         except CapExceeded as exc:
             blocker, release = f"cap_exceeded:{exc.kind}: {exc}"[:500], "not_reached"
             status = "timeout" if exc.kind == "wall" else "blocked"
+        except (ConnectionError, TimeoutError, EngineUnavailable) as exc:
+            blocker, status, release = f"{type(exc).__name__}: {exc}"[:500], "provider_unavailable", "not_reached"
+        except Exception as exc:                     # a harness or product bug: the run counts as failed
+            blocker, status, release = f"{type(exc).__name__}: {exc}"[:500], "failed", "not_reached"
         cap_use = limiter.snapshot()
         wall = round(time.monotonic() - t0, 3)
         ended = stamp()
@@ -157,7 +162,7 @@ def run_slot(slot: dict, out_dir: Path, provider_factory, caps: dict | None = No
             if co.db.one("SELECT 1 FROM sqlite_master WHERE name='reviews'") else 0
     hashes = oracle.package_hashes(slot["task_id"])
     accepted = result["all_passed"] is True
-    terminal = (status if status in ("blocked", "timeout") else "accepted" if accepted else
+    terminal = (status if status in ("blocked", "timeout", "provider_unavailable", "failed") else "accepted" if accepted else
                 "rejected" if status == "completed" else "failed")
     record = {
         "schema_version": 2, "data_kind": "synthetic-mock", "experiment_id": "mock-pilot-20261031",
