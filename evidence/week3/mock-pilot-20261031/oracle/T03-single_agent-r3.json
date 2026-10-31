@@ -1,0 +1,45 @@
+{
+  "task_id": "T03",
+  "checks": [
+    {
+      "id": "tests.test_public::test_reserve_and_release",
+      "passed": false
+    },
+    {
+      "id": "tests.test_public::test_no_oversell",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_failed_reserve_reserves_nothing",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_qty[0]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_qty[-2]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_qty[1.0]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_bad_qty[True]",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_multi_sku_order_and_accumulation",
+      "passed": false
+    },
+    {
+      "id": "hidden_oracle.test_hidden::test_unknown_sku_and_reuse",
+      "passed": false
+    }
+  ],
+  "all_passed": false,
+  "exit_code": 1,
+  "output": "  def __init__(self):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/inventory.py:7: NotImplementedError\n_______________________________ test_bad_qty[0] ________________________________\n\nqty = 0\n\n    @pytest.mark.parametrize(\"qty\", [0, -2, 1.0, True])\n    def test_bad_qty(qty):\n>       inv = Inventory()\n              ^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:18: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.inventory.Inventory object at 0x7fda09132780>\n\n    def __init__(self):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/inventory.py:7: NotImplementedError\n_______________________________ test_bad_qty[-2] _______________________________\n\nqty = -2\n\n    @pytest.mark.parametrize(\"qty\", [0, -2, 1.0, True])\n    def test_bad_qty(qty):\n>       inv = Inventory()\n              ^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:18: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.inventory.Inventory object at 0x7fda09132ea0>\n\n    def __init__(self):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/inventory.py:7: NotImplementedError\n______________________________ test_bad_qty[1.0] _______________________________\n\nqty = 1.0\n\n    @pytest.mark.parametrize(\"qty\", [0, -2, 1.0, True])\n    def test_bad_qty(qty):\n>       inv = Inventory()\n              ^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:18: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.inventory.Inventory object at 0x7fda09009d90>\n\n    def __init__(self):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/inventory.py:7: NotImplementedError\n______________________________ test_bad_qty[True] ______________________________\n\nqty = True\n\n    @pytest.mark.parametrize(\"qty\", [0, -2, 1.0, True])\n    def test_bad_qty(qty):\n>       inv = Inventory()\n              ^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:18: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.inventory.Inventory object at 0x7fda09102f10>\n\n    def __init__(self):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/inventory.py:7: NotImplementedError\n____________________ test_multi_sku_order_and_accumulation _____________________\n\n    def test_multi_sku_order_and_accumulation():\n>       inv = Inventory()\n              ^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:27: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.inventory.Inventory object at 0x7fda09102360>\n\n    def __init__(self):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/inventory.py:7: NotImplementedError\n__________________________ test_unknown_sku_and_reuse __________________________\n\n    def test_unknown_sku_and_reuse():\n>       inv = Inventory()\n              ^^^^^^^^^^^\n\nhidden_oracle/test_hidden.py:39: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.inventory.Inventory object at 0x7fda09126250>\n\n    def __init__(self):\n>       raise NotImplementedError\nE       NotImplementedError\n\napp/inventory.py:7: NotImplementedError\n=========================== short test summary info ============================\nFAILED tests/test_public.py::test_reserve_and_release - NotImplementedError\nFAILED tests/test_public.py::test_no_oversell - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_failed_reserve_reserves_nothing - N...\nFAILED hidden_oracle/test_hidden.py::test_bad_qty[0] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_qty[-2] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_qty[1.0] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_bad_qty[True] - NotImplementedError\nFAILED hidden_oracle/test_hidden.py::test_multi_sku_order_and_accumulation - ...\nFAILED hidden_oracle/test_hidden.py::test_unknown_sku_and_reuse - NotImplemen...\n9 failed in 0.05s\n",
+  "evaluated_tree_sha256": "767583551f945204b6cc90b1c88c7bc99444f408c95986466cc28144bc85e3e0"
+}
