@@ -16,7 +16,11 @@ What Vittics Builder protects:
   read-only roles.
 - File tools cannot leave the project workspace; a deny list blocks privilege escalation,
   deleting outside the workspace, piping downloads into a shell and `git push`.
-- With `sandbox.mode: docker`, agents' commands run in a container (no network unless allowed).
+- With `sandbox.mode: docker`, agents' commands run in a container: no network unless allowed, no privilege
+  gain (`no-new-privileges`), at most 1024 processes and 4 GB of memory, the NET_RAW, MKNOD, AUDIT_WRITE and
+  SETFCAP capabilities dropped, and the workspace's `.git` mounted read-only.
+- After ten wrong dashboard tokens from one address within five minutes, sign-in is refused for that address
+  (HTTP 429) until the window passes.
 - Dashboard access needs a CEO or CTO token. Keep it on localhost or behind HTTPS (e.g. Tailscale).
 
 What it does not protect against:
@@ -25,5 +29,6 @@ What it does not protect against:
 - The deny list is a seatbelt, not a sandbox, in `sandbox.mode: local`. Without bubblewrap or sandbox-exec
   (Windows; Linux without bubblewrap or without unprivileged user namespaces), agents' commands can read
   the company's `.vittics` folder.
-- In `sandbox.mode: docker`, the workspace is mounted with its `.git` writable (P-05b, open).
+- Docker mode still runs commands as the image's user (root in the default image), and these limits have been
+  checked as command-line arguments only, not against a running Docker daemon.
 - AI audits are not a substitute for a professional security review.

@@ -6,6 +6,7 @@ import secrets
 import shutil
 import tempfile
 import threading
+import time
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -164,10 +165,24 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
             co.previews.stop_all()
     app = FastAPI(title="Vittics Builder", docs_url=None, redoc_url=None,lifespan=lifespan)
 
-    def auth(x_token: str = Header(default="")) -> str:
+    failures: dict[str, list[float]] = {}            # client address -> recent failed sign-in times (SEC-10)
+    failures_lock = threading.Lock()
+    LIMIT, WINDOW = 10, 300.0
+
+    def auth(request: Request, x_token: str = Header(default="")) -> str:
+        client = request.client.host if request.client else "unknown"
+        moment = time.monotonic()
+        with failures_lock:
+            recent = [t for t in failures.get(client, []) if moment - t < WINDOW]
+            failures[client] = recent
+            if len(recent) >= LIMIT:
+                raise HTTPException(429, "Too many failed sign-ins. Wait a few minutes and try again.")
         for role, token in tokens.items():
             if x_token and secrets.compare_digest(x_token, token):
                 return role
+        if x_token:                                  # a wrong token is a guess; no token is just signed out
+            with failures_lock:
+                failures.setdefault(client, []).append(moment)
         raise HTTPException(401, "Sign in with your CEO or CTO token.")
 
     def run_in_background(pid: int, **limits) -> None:

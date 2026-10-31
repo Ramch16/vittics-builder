@@ -42,6 +42,26 @@ jobs:
           pip install "pytest-github-actions-annotate-failures>=0.2"
           python -m pytest -q -p no:cacheprovider -rfE
 
+  locked-install:
+    # The dependency lock (requirements/dev.lock, Linux) installs with hash checking and the suite passes on it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install from the lock, hashes required
+        run: |
+          pip install --require-hashes -r requirements/dev.lock
+          pip install --no-deps -e .
+          pip check
+      - name: Configure git for the tests' commits
+        run: |
+          git config --global user.email "ci@vittics.local"
+          git config --global user.name "Vittics Builder CI"
+      - name: Test
+        run: python -m pytest -q -p no:cacheprovider
+
   dashboard-dialogs:
     runs-on: ubuntu-latest
     steps:

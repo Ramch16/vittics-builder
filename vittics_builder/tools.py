@@ -353,7 +353,17 @@ class Workspace:
         env = scrub_env(os.environ) if self.mode == "docker" else command_env(os.environ)
         env.update(extra_env or {})
         if self.mode == "docker":
-            argv = ["docker", "run", "--rm", "-v", f"{self.root}:/work", "-w", "/work"]
+            argv = ["docker", "run", "--rm", "-v", f"{self.root}:/work", "-w", "/work",
+                    # SEC-09: no privilege gain through setuid binaries, bounded processes and memory, and none
+                    # of the default capabilities builds do not need. Commands still run as the image's user
+                    # (root in python:3.12-slim) so installing packages keeps working.
+                    "--security-opt", "no-new-privileges", "--pids-limit", "1024", "--memory", "4g",
+                    "--cap-drop", "NET_RAW", "--cap-drop", "MKNOD", "--cap-drop", "AUDIT_WRITE",
+                    "--cap-drop", "SETFCAP"]
+            if (self.root / ".git").exists():
+                # P-05b: the company's git metadata is read-only inside the container, so a hook or config
+                # written there cannot run on the company's next git call.
+                argv += ["-v", f"{self.root / '.git'}:/work/.git:ro"]
             for name in extra_env or {}:            # -e NAME passes the value from our environment, not the command line
                 argv += ["-e", name]
             if not self.docker_network:

@@ -60,3 +60,26 @@ def test_harness_refuses_real_providers():
     from benchmark.harness import main
     with pytest.raises(SystemExit):
         main(["--schedule", "benchmark/schedule-20261031.json", "--out", "x", "--provider", "anthropic"])
+
+
+def test_paired_input_audit_passes_on_the_committed_mock_pilot_and_catches_drift():
+    import copy
+    from benchmark.audit import audit
+    sched = json.load(open("benchmark/schedule-20261031.json", encoding="utf-8"))
+    records = [json.loads(l) for l in open("evidence/week3/mock-pilot-20261031/records.jsonl", encoding="utf-8")]
+    assert audit(sched, records)["passed"]
+    drifted = copy.deepcopy(records)
+    drifted[0]["engine"]["model"] = "other-model"
+    result = audit(sched, drifted[1:] + drifted[:1])
+    assert not result["passed"] and result["mismatches"][0]["field"] == "engine"
+    result = audit(sched, records[:-1])
+    assert result["missing_slots"] == [records[-1]["run_id"]]
+
+
+def test_harness_records_agent_timing(tmp_path):
+    from benchmark.harness import run_slot
+    from vittics_builder.llm import MockProvider
+    r = run_slot({"slot": 1, "task_id": "T02", "repeat": 1, "condition": "single_agent", "run_id": "T02-single_agent-r1"},
+                 tmp_path, MockProvider)
+    assert r["timing"]["summed_agent_seconds"] is not None
+    assert 0 <= r["timing"]["active_union_seconds"] <= r["timing"]["summed_agent_seconds"] + 1e-9

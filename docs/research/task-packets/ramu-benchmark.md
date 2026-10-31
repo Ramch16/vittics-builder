@@ -45,14 +45,19 @@ contingency and a stop rule.
 **Accepted when:** every null in the freeze draft has a proposed value or a stated reason it stays null.
 Spending authorization is a separate decision for the whole team.
 
-### R4. Runtime cap enforcement (needed before any paid run)
+### R4. Check the cap enforcement
 
-Caps are recorded today but not enforced. Specify, or build, a hard stop: the run ends when the summed tokens
-or cost across all agents in a slot reach the cap, including in-flight requests. Then test it with the mock
-provider.
+Caps are now enforced (`vittics_builder/caps.py`, `tests/test_caps.py`). Check that they match the protocol:
+what counts toward the token cap, how cost is estimated before a call, why unknown prices and CLI engines are
+refused under a cost cap, and how a cap stop is recorded.
 
-**Deliverable:** a PR from your account with a test (for example, a mock run with a tiny cap ends as
-`terminal_status: "incomplete"` with a recorded blocker), or a written specification if you don't build it.
+```
+python -m pytest -q -p no:cacheprovider tests/test_caps.py
+python -m benchmark.harness --schedule benchmark/schedule-20261031.json --out /tmp/r4 --slots 1-2 --max-total-tokens 200
+python -c "import json; [print(json.loads(l)['terminal_status'], json.loads(l)['blocker']) for l in open('/tmp/r4/records.jsonl')]"
+```
+
+**Deliverable:** a "Caps" section in your review file: accept, or list the changes with reasons.
 
 ### R5. Literature plan (Weeks 3–4)
 

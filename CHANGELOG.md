@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- **Hard per-run caps for benchmark slots.** `vittics_builder.caps.RunCaps` admits a model call only if used and
+  in-flight usage plus the call's worst case stays within the token and cost caps; unknown prices are refused
+  under a cost cap, and CLI engines under token or cost caps. A time cap stops new calls.
+- **Docker sandbox limits.** `no-new-privileges`, a process limit, a memory limit, four capabilities dropped,
+  and `.git` mounted read-only (an agent can no longer plant a hook through the container).
+- **Dashboard sign-in rate limit.** Ten wrong tokens from one address in five minutes returns 429.
+- **Dependency lock.** `requirements/dev.lock` with hashes; CI installs it with `--require-hashes`.
 - **No task is done without an independent review.** If no reviewer or QA other than the author is available,
   the ticket stays open and the build stops with a resumable error. A ticket needs one independent verdict, two
   in `thorough` mode. Previously it was marked done with zero reviews.

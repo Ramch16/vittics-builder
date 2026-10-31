@@ -62,8 +62,8 @@ reviewers without a shell, and the sandbox backend.
 
 ### N4. Open architecture items (pick at least one)
 
-- P-05b: Docker mode mounts a writable `.git`. Propose a mount layout (for example, a `.git` mounted read-only or
-  kept outside the mount) with a test.
+- P-05b: `.git` is now mounted read-only in Docker mode (`tools.py`), checked as arguments only. On a machine
+  with Docker, confirm that agents' normal git reads still work in the container and that writing a hook fails.
 - Show the active sandbox mode (`sandbox_backend()`) on the dashboard and in `vittics-builder doctor`.
 
 **Deliverable:** a PR from your account with the change and a test, or a written design if you don't have

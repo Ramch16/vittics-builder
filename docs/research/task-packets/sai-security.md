@@ -70,8 +70,10 @@ cd desktop && npm audit --package-lock-only
 cargo install cargo-audit && (cd desktop/src-tauri && cargo audit)     # if Rust is installed
 ```
 
-If you have Docker: run `python -m pytest -q tests/test_security_boundaries.py` with `sandbox.mode: docker`
-configured, and test whether a hook can be planted through the Docker mount (P-05b).
+If you have Docker: confirm the new container limits (`tests/test_hardening.py` checks only the arguments).
+With `sandbox.mode: docker`, try to write `.git/hooks/pre-commit` from an agent command (it should fail: read-only
+mount), check `--pids-limit` and `--memory` take effect, and record whether package installs still work.
+Also try the sign-in rate limit (SEC-10) against a running dashboard.
 
 ### Q5. GitHub reviews
 
