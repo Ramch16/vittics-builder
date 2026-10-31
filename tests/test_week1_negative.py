@@ -32,7 +32,6 @@ def to_release_approval(co):
 
 
 # ---- release evidence ---------------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason="W1-F1: legacy-unmapped coverage is recorded but not shown at the release gate")
 def test_release_reviewer_is_told_when_requirements_are_unmapped(co):
     p = to_release_approval(co)
     [release] = [a for a in co.pipeline.inbox("cto") if a["kind"] == "release" and a["project_id"] == p["id"]]
@@ -63,19 +62,24 @@ def test_vault_canary_reaches_checks_but_no_stored_record(co):
 
 
 # ---- review independence ------------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason="W1-S2: with no checker staffed, a task passes with zero reviews")
 def test_no_task_is_done_without_an_independent_review(co):
+    """A-01 (W1-F2/W1-S2), decision D1/D2: with nobody left to review, tickets stay open and the build stops
+    with a resumable error instead of marking work done with zero reviews."""
     for agent in co.db.all("SELECT a.id FROM agents a JOIN roles r ON r.id=a.role "
                            "WHERE r.kind IN ('reviewer','qa') AND a.status!='fired'"):
         co.org.fire(agent["id"], "test: nobody left to review")
     p = co.pipeline.create_project("Library", "A small library with tests.")
     co.pipeline.advance(p["id"])
     decide_next(co, "ceo")
-    decide_next(co, "cto")
-    done = co.db.all("SELECT id FROM tasks WHERE project_id=? AND status='done' AND key NOT LIKE 'stage-%'", p["id"])
-    assert done, "the build should have finished its tasks"
-    unreviewed = [t["id"] for t in done if not co.db.one("SELECT 1 FROM reviews WHERE task_id=?", t["id"])]
-    assert not unreviewed
+    from vittics_builder.pipeline import PipelineError
+    with pytest.raises(PipelineError, match="independent review"):
+        decide_next(co, "cto")
+    built = co.db.all("SELECT id, status FROM tasks WHERE project_id=? AND key NOT LIKE 'stage-%'", p["id"])
+    assert built, "the plan should have produced tasks"
+    done = [t["id"] for t in built if t["status"] == "done"]
+    assert not [t for t in done if not co.db.one("SELECT 1 FROM reviews WHERE task_id=?", t)]
+    assert not done
+    assert co.db.one("SELECT 1 FROM events WHERE project_id=? AND message LIKE '%required independent review%'", p["id"])
 
 
 # ---- workspace boundaries -----------------------------------------------------------------------------------
@@ -104,9 +108,10 @@ def _argv(engine, write, run, monkeypatch):
     return json.loads(run_cli(engine, system="s", prompt="p", cwd=None, model="", write=write, run=run, timeout=60)["text"])
 
 
-def test_claude_code_reviewer_gets_bash_but_not_edit_tools(monkeypatch):
-    """Recorded as-is: a reviewer may run tests (Bash) but not use Edit/Write. Bash can still write files, so
-    "reviewers may not edit" is not an enforced boundary (threat-model.md)."""
+def test_claude_code_engine_maps_run_permission_to_bash(monkeypatch):
+    """The engine grants Bash only when the role may run commands. Reviewer roles no longer get run_command
+    (decision D4, see test_reviewer_roles_get_no_shell), so a claude-code reviewer runs with Read/Glob/Grep only;
+    QA, which keeps its shell, gets Bash but not Edit/Write."""
     argv = _argv(BUILTIN_ENGINES["claude-code"], write=False, run=True, monkeypatch=monkeypatch)
     allowed = argv[argv.index("--allowedTools") + 1:argv.index("--disallowedTools")]
     denied = argv[argv.index("--disallowedTools") + 1:]
@@ -114,6 +119,41 @@ def test_claude_code_reviewer_gets_bash_but_not_edit_tools(monkeypatch):
 
 
 @pytest.mark.parametrize("name", [n for n, e in BUILTIN_ENGINES.items() if not e.get("verified")])
-@pytest.mark.xfail(strict=True, reason="SEC-08: unverified adapters pass no flag for read-only roles")
-def test_unverified_adapters_enforce_read_only_for_read_roles(name, monkeypatch):
-    assert BUILTIN_ENGINES[name]["level_args"]["read"], f"{name}: read-only roles get the CLI's default mode"
+def test_unverified_adapters_refuse_read_only_roles_in_a_workspace(name, tmp_path):
+    """SEC-08, decision D5: an unverified adapter with no read-only flag is refused for read-only roles in a
+    project workspace, before anything starts."""
+    from vittics_builder.engines import EngineError, run_cli
+    engine = BUILTIN_ENGINES[name]
+    if engine["level_args"]["read"]:
+        pytest.skip(f"{name} now passes a read-only flag")
+    with pytest.raises(EngineError, match="no verified read-only mode"):
+        run_cli(engine, system="s", prompt="p", cwd=str(tmp_path), model="", write=False, run=False, timeout=5)
+
+
+@pytest.mark.parametrize("name", [n for n, e in BUILTIN_ENGINES.items() if not e.get("verified")])
+def test_unverified_adapters_still_build_with_their_edit_flag(name, tmp_path, monkeypatch):
+    """Builders keep working on these CLIs: write roles are not refused (only read-only roles are)."""
+    argv = _argv(BUILTIN_ENGINES[name], write=True, run=True, monkeypatch=monkeypatch)
+    assert argv[-len(BUILTIN_ENGINES[name]["level_args"]["write"]):] == BUILTIN_ENGINES[name]["level_args"]["write"] \
+        or set(BUILTIN_ENGINES[name]["level_args"]["write"]) <= set(argv)
+
+
+def test_reviewer_roles_get_no_shell(co):
+    """Decision D4: reviewer roles run without run_command (a shell can write files); QA keeps it."""
+    captured = {}
+    original = co.runtime._run_cli
+
+    def spy(agent, role, names, *rest, **kw):
+        captured[role["kind"]] = list(names)
+        return original(agent, role, names, *rest, **kw)
+    reviewer = co.db.one("SELECT a.* FROM agents a JOIN roles r ON r.id=a.role WHERE r.kind='reviewer' AND a.status!='fired'")
+    qa = co.db.one("SELECT a.* FROM agents a JOIN roles r ON r.id=a.role WHERE r.kind='qa' AND a.status!='fired'")
+    for agent in (reviewer, qa):
+        co.db.run("UPDATE agents SET model='cli:missing-engine' WHERE id=?", agent["id"])
+    co.runtime._run_cli = spy
+    p = co.pipeline.create_project("Library", "A small library with tests.")
+    ws = co.pipeline.workspace(co.pipeline.project(p["id"]))
+    for agent in (reviewer, qa):
+        co.runtime.run(co.db.one("SELECT * FROM agents WHERE id=?", agent["id"]), "Check it.", ws, project_id=p["id"])
+    assert "run_command" not in captured["reviewer"] and "run_approved_checks" in captured["reviewer"]
+    assert "run_command" in captured["qa"]

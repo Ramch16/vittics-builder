@@ -86,7 +86,7 @@ def test_a_refused_cli_is_an_engine_error_not_a_crash(windows, tmp_path, monkeyp
     monkeypatch.setattr(platforms.shutil, "which", lambda b: str(bat) if b == "gemini" else None)
     with pytest.raises(EngineError, match="batch wrapper"):
         engines.run_cli(BUILTIN_ENGINES["gemini"], system="rules", prompt="Fix T-1 & ship", cwd=str(tmp_path),
-                        model="", write=False, run=False, timeout=10)
+                        model="", write=True, run=True, timeout=10)
 
 
 def test_store_shortcuts_are_not_python(monkeypatch):

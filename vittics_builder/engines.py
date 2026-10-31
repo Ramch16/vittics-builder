@@ -181,6 +181,12 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
             part = part.replace(key, value)
         return part
     argv = [put(part) for part in engine["command"]]
+    if not write and cwd and engine.get("verified") is False and not (engine.get("level_args") or {}).get("read") \
+            and not engine.get("tools"):
+        # No documented read-only flag has been verified for this CLI, so a read-only role would run in its
+        # default mode, which may edit files. Refuse until the adapter is verified (SEC-08, decision D5).
+        raise EngineError(f"'{argv[0]}' has no verified read-only mode; it cannot run a read-only role in a "
+                          "project workspace. Use a verified engine (claude-code, codex) for this role.")
     if engine.get("level_args"):
         argv += list(engine["level_args"].get("write" if write else "read", []))
     if model and engine.get("model_args"):
