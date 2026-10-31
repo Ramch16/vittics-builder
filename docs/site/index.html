@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vittics Builder: research status</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#e3e6ec; --accent:#2f5bd3; --bg:#fbfbfd; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:860px; margin:0 auto; padding:48px 24px 80px; }
+  h1 { font-size:2rem; margin:0 0 .25rem; letter-spacing:-.01em; }
+  h2 { font-size:1.15rem; margin:2.5rem 0 .75rem; padding-top:1rem; border-top:1px solid var(--line); }
+  .lede { color:var(--muted); font-size:1.1rem; margin:0 0 1.5rem; }
+  .status { display:inline-block; padding:.2rem .6rem; border-radius:999px; background:#fff4d6; color:#7a5300; font-size:.85rem; }
+  table { width:100%; border-collapse:collapse; font-size:.95rem; }
+  th, td { text-align:left; padding:.5rem .6rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  code { font-size:.9em; background:#eef0f5; padding:.1rem .3rem; border-radius:4px; }
+  a { color:var(--accent); }
+  footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Vittics Builder</h1>
+  <p class="lede">An open-source software company staffed by AI agents, run by two people, with a benchmark
+  that asks whether its review-heavy workflow beats a single agent.</p>
+  <span class="status">Status: benchmark built and tested offline. No real comparison has been run yet.</span>
+
+  <h2>The question</h2>
+  <p>Given the same frozen requirements, starter code, public tests, model and resource caps, how does the
+  Vittics multi-role workflow (builder, independent code review, QA, rework) compare with one persistent
+  builder on independent hidden-test acceptance, false releases, rework and resource use?</p>
+
+  <h2>What exists</h2>
+  <table>
+    <tr><th>Part</th><th>State</th></tr>
+    <tr><td>Eight synthetic tasks with hidden tests</td><td>Built; every starter fails and every reference passes 81 checks</td></tr>
+    <tr><td>Independent oracle</td><td>Runs the frozen public and hidden tests on a fresh copy of the final tree</td></tr>
+    <tr><td>48-run counterbalanced schedule</td><td>Frozen (seed 20261031)</td></tr>
+    <tr><td>Both conditions and run records</td><td>Built; records validated against a JSON schema</td></tr>
+    <tr><td>Hard per-run token, cost and time caps</td><td>Built and tested</td></tr>
+    <tr><td>Security controls</td><td>Review minimums, secrets sandbox (Linux, macOS), Docker limits, sign-in rate limit</td></tr>
+  </table>
+
+  <h2>What does not exist yet</h2>
+  <p>Results. The only runs so far used scripted offline agents to test the pipeline; they say nothing about
+  either condition. A real pilot needs an approved model, caps and budget, and the team's reviews of the
+  tasks, isolation and baseline.</p>
+
+  <h2>Reproduce it</h2>
+  <p>From a clone of the repository: <code>sh scripts/reproduce.sh</code>. This installs the hashed lock, runs
+  the tests, validates the tasks, regenerates the schedule, runs mock slots and freezes the output.</p>
+
+  <footer>Source: github.com/Ramch16/vittics-builder · MIT licence · This page is a local draft and is not published.</footer>
+</main>
+</body>
+</html>

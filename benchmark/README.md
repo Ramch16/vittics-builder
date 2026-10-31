@@ -12,12 +12,19 @@ judges the final tree.
 | `tasks/T0n-*/reference/` | Reference implementation, used only to validate the package |
 | `oracle.py` | Independent evaluator: fresh temporary copy, frozen public tests and hidden tests, per-check results |
 | `schedule.py`, `schedule-20261031.json` | Counterbalanced 48-slot schedule, seed 20261031 |
-| `harness.py` | Runs slots under `multi_agent` (Vittics task loop) and `single_agent` (one builder) and writes schema-v2 records |
+| `harness.py` | Runs slots under `multi_agent` (Vittics task loop) and `single_agent` (one builder) and writes schema-v2 records; enforces `--max-total-tokens`, `--max-cost`, `--max-wall-seconds` |
+| `audit.py` | Paired-input audit: both conditions got identical inputs, and every scheduled slot ran |
+| `report.py` | Markdown report: primary metric with missingness bounds, per-task table, secondary metrics |
+| `rerun.py` | Reruns a slot for an infrastructure reason, keeping the original and logging the deviation |
 
 ```
 python -m benchmark.oracle validate                    # every starter fails, every reference passes
 python -m benchmark.schedule --seed 20261031           # reproduces schedule-20261031.json
 python -m benchmark.harness --schedule benchmark/schedule-20261031.json --out <folder>
+python -m benchmark.audit --schedule benchmark/schedule-20261031.json --records <folder>/records.jsonl
+python -m benchmark.report --records <folder>/records.jsonl --out <folder>/report.md
+python scripts/freeze_evidence.py freeze <folder>
+sh scripts/reproduce.sh                                # clean-room reproduction from the lock
 ```
 
 ## Tasks
