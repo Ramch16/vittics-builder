@@ -508,6 +508,15 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         run_in_background(pid)                       # it may decide a gate that is waiting now
         return co.pipeline.project(pid)
 
+    @app.post('/api/projects/{pid}/manual-approvals/{human_role}')
+    def set_manual_approval(pid: int, human_role: str, data: dict, role: str = Depends(auth)) -> dict:
+        if human_role not in delegable(role):
+            raise HTTPException(403, 'You may change only your own manual approval setting.')
+        guard(lambda: co.pipeline.autopilot.set_manual_approval(
+            pid, human_role, data.get('required'), co.s.human(role)))
+        run_in_background(pid)
+        return co.pipeline.project(pid)
+
     @app.get("/api/projects/{pid}/keys")
     def keys(pid: int, role: str = Depends(auth)) -> list[str]:
         guard(lambda: co.pipeline.project(pid))

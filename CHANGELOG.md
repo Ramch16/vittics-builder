@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Add independent, persistent CEO/CTO manual approval switches per project. OFF delegates routine
+  decisions and verified final sign-off; ON overrides Autopilot and requires manual approval.
+  Existing role permissions, exception handling and release verification remain enforced.
 - Fix five documented command-boundary regressions: refuse literal parent traversal and quoted
   absolute host operands, scrub inherited credential-bearing URLs, and disable hooks/fsmonitor and
   inherited Git configuration for company Git operations. Local command policy remains a guard,

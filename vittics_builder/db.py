@@ -393,6 +393,7 @@ class DB:
                              ("checks", "TEXT NOT NULL DEFAULT '[]'"), ("autopilot", "TEXT NOT NULL DEFAULT 'off'"),
                              # 0.27: whose gates the autopilot level covers. Existing projects keep both.
                              ("autopilot_roles", "TEXT NOT NULL DEFAULT 'ceo,cto'"),
+                             ("approval_overrides", "TEXT NOT NULL DEFAULT '{}'"),
                              ("size", "TEXT NOT NULL DEFAULT 'standard'"),
                              ("repair_starts", "INTEGER NOT NULL DEFAULT 0")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
