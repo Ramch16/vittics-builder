@@ -115,6 +115,11 @@ def protocol(names: list[str]) -> str:
                 "Use only IDs from the CTO-approved product.json. Finish that reply with run_checks alone; Vittics will run them "
                 "on this computer and resume you with the actual results before you submit work.\n"
                 if "run_approved_checks" in names else "")
+    if "submit_review" in names:
+        guidance += ("Reviewers must submit the review JSON action below, even though no native submit_review tool exists. "
+                     "An approve verdict cannot include failed or unverified acceptance entries. "
+                     "For ticket review, assess the ticket's own criteria; describe unrelated deferred release gates in notes. "
+                     "For release integration review, include every PRD criterion, including manual checks.\n")
     return guidance + ("When you are finished, reply with a short plain summary, then end with exactly one fenced block "
             "tagged vittics-builder holding a JSON object with only the keys you use:\n```vittics-builder\n{\n"
             + ",\n".join(rows) + "\n}\n```\nUse the block for these company actions; do your file and command work "

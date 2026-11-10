@@ -209,3 +209,58 @@ def test_env_keep_patterns_never_return_the_api_key_to_a_subscription_engine():
     env = engine_env({"subscription": True, "env_keep": ["*_API_KEY"]},
                      {"ANTHROPIC_API_KEY": "a", "OPENAI_API_KEY": "o", "VITTICS_CEO_TOKEN": "t", "HOME": "/h"})
     assert env == {"OPENAI_API_KEY": "o", "HOME": "/h"}
+
+
+def test_invalid_cli_review_gets_one_read_only_repair(cli, monkeypatch):
+    co, _, _ = cli
+    reviewer = on_cli(co, 'Pavan')
+    p = co.pipeline.create_project('Review repair', 'A library')
+    replies = [
+        {'review': {'score': 93, 'verdict': 'approve', 'notes': 'Ticket passes; release checks deferred.',
+                    'acceptance': [{'criterion': 'Unrelated release check', 'status': 'unverified', 'evidence': 'Owned by release QA'}]}},
+        {'review': {'score': 93, 'verdict': 'approve', 'notes': 'Ticket passes; release checks remain with QA.',
+                    'acceptance': [{'criterion': 'Ticket behavior', 'status': 'passed', 'evidence': '13 unit tests and build passed'}]}}
+    ]
+    calls = []
+    def run(engine, **kwargs):
+        calls.append(kwargs)
+        return {'text': '```vittics-builder\n' + json.dumps(replies.pop(0)) + '\n```',
+                'cost': 0, 'input_tokens': 10, 'output_tokens': 10, 'turns': 1, 'is_error': False}
+    monkeypatch.setattr('vittics_builder.agent.run_cli', run)
+    res = co.runtime.run(reviewer, 'Review this ticket.', co.pipeline.workspace(p), project_id=p['id'])
+    assert res.review['verdict'] == 'approve' and res.turns == 2
+    assert len(calls) == 2
+    assert calls[1]['write'] is False and calls[1]['run'] is False
+    assert 'Cannot approve with failed or unverified' in calls[1]['prompt']
+    assert 'Never invent evidence' in calls[1]['prompt']
+    assert '"create_tickets"' not in calls[1]['system']
+
+
+def test_release_review_retry_does_not_bypass_unverified_criteria(cli, monkeypatch):
+    co, _, _ = cli
+    reviewer = on_cli(co, 'Badri')
+    calls = []
+    def run(engine, **kwargs):
+        calls.append(kwargs)
+        data = {'review': {'score': 90, 'verdict': 'approve', 'acceptance': [
+            {'criterion': 'Manual keyboard test', 'status': 'unverified', 'evidence': 'Not performed'}]}}
+        return {'text': '```vittics-builder\n' + json.dumps(data) + '\n```',
+                'cost': 0, 'input_tokens': 10, 'output_tokens': 10, 'turns': 1, 'is_error': False}
+    monkeypatch.setattr('vittics_builder.agent.run_cli', run)
+    res = co.runtime.run(reviewer, 'Release review.', None, meta={'purpose': 'integration'})
+    assert res.review is None and len(calls) == 2
+    assert 'every PRD acceptance criterion' in calls[1]['prompt']
+    assert 'Review remains incomplete after one retry' in res.text
+
+
+def test_missing_cli_review_requires_explicit_structured_verdict(cli, monkeypatch):
+    co, _, _ = cli
+    reviewer = on_cli(co, 'Pavan')
+    replies = ['Approved, 93/100.', '```vittics-builder\n{"review":{"score":70,"verdict":"request_changes","notes":"Missing evidence"}}\n```']
+    def run(engine, **kwargs):
+        return {'text': replies.pop(0), 'cost': 0, 'input_tokens': 10, 'output_tokens': 10,
+                'turns': 1, 'is_error': False}
+    monkeypatch.setattr('vittics_builder.agent.run_cli', run)
+    res = co.runtime.run(reviewer, 'Review.', None)
+    assert res.review['verdict'] == 'request_changes'
+    assert not replies

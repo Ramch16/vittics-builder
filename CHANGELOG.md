@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Retry a rejected or missing CLI review action once with its validation error and explicit scope, using
+  read-only permissions and no repeated ticket actions. Preserve acceptance gates and expose the
+  actual error when review remains incomplete.
 - Default new companies to conservative adaptive review; existing org.yaml settings remain unchanged.
 - Pause dashboard polling in hidden tabs and coalesce slow requests, while refreshing after actions.
 - Batch agent presence lookups into four queries regardless of team size.

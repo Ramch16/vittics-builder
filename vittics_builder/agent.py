@@ -342,6 +342,31 @@ class AgentRuntime:
                 notes.append(f"{name}: {exc}")
                 result.tool_log.append(f"{name} (failed)")
         result.text = text + (("\n\n(Vittics Builder could not use part of the reply: " + "; ".join(notes) + ")") if notes else "")
+        if ("submit_review" in names and not chat_with and result.review is None
+                and result.completed and not meta.get("review_repair")):
+            # A valid-looking narrative is not a verdict. Ask the same reviewer to
+            # repair the rejected/missing action once, without editing or extra actions.
+            diagnostic = "; ".join(notes) or "No structured review action was submitted."
+            if meta.get("run_id") and self.runs:
+                self.runs.event(meta["run_id"], "error", "Review action rejected; retrying once: " + diagnostic)
+            scope = ("This is release integration: include every PRD acceptance criterion, including manual checks. "
+                     if meta.get("purpose") == "integration" else
+                     "This is a scoped assignment: acceptance entries must assess criteria within this ticket. "
+                     "Describe release checks owned by other tickets as deferred context in notes; do not claim they passed. ")
+            repaired = self._run_cli(agent, role, ["submit_review"],
+                instructions + "\n\nYour previous response could not supply a valid review:\n" + result.text[-12000:] +
+                "\n\nValidation error: " + diagnostic + "\n" + scope +
+                "If any required criterion in scope is failed or unverified, request_changes and identify the gap. "
+                "Never invent evidence or change unverified to passed just to satisfy the validator. "
+                "Do not edit files, run commands, create tickets or repeat prior actions. "
+                "Return exactly one valid vittics-builder JSON block with the review action. "
+                "submit_review is a JSON action, not a native CLI tool.",
+                ws, project_id, {**meta, "review_repair": True}, None, None, memories)
+            repaired.turns += result.turns
+            repaired.tool_log = result.tool_log + repaired.tool_log
+            if repaired.review is None:
+                repaired.text += "\nReview remains incomplete after one retry. Original validation error: " + diagnostic
+            return repaired
         return result
 
     def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:

@@ -1262,7 +1262,8 @@ class Pipeline:
                 note(self.db, task["id"], checker["name"], self._verdict(check.review), kind="comment")
                 if not check.review:
                     self.db.log("warn", f"{checker['name']} gave no verdict on [{task['key']}].", pid)
-                    raise PipelineError(f"{checker['name']} gave no verdict. Review is incomplete; "
+                    detail = (check.text or "No structured review action was returned.")[-2000:]
+                    raise PipelineError(f"{checker['name']} gave no valid verdict: {detail} Review is incomplete; "
                                         "resume to retry review without charging a builder rework attempt.")
                 if not check.completed:
                     approved = False
