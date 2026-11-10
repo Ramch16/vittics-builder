@@ -227,7 +227,7 @@ def test_invalid_cli_review_gets_one_read_only_repair(cli, monkeypatch):
         return {'text': '```vittics-builder\n' + json.dumps(replies.pop(0)) + '\n```',
                 'cost': 0, 'input_tokens': 10, 'output_tokens': 10, 'turns': 1, 'is_error': False}
     monkeypatch.setattr('vittics_builder.agent.run_cli', run)
-    res = co.runtime.run(reviewer, 'Review this ticket.', co.pipeline.workspace(p), project_id=p['id'])
+    res = co.runtime.run(reviewer, 'Review this ticket.', co.pipeline.workspace(p), project_id=p['id'], meta={'author': 'Hari'})
     assert res.review['verdict'] == 'approve' and res.turns == 2
     assert len(calls) == 2
     assert calls[1]['write'] is False and calls[1]['run'] is False
@@ -261,6 +261,6 @@ def test_missing_cli_review_requires_explicit_structured_verdict(cli, monkeypatc
         return {'text': replies.pop(0), 'cost': 0, 'input_tokens': 10, 'output_tokens': 10,
                 'turns': 1, 'is_error': False}
     monkeypatch.setattr('vittics_builder.agent.run_cli', run)
-    res = co.runtime.run(reviewer, 'Review.', None)
+    res = co.runtime.run(reviewer, 'Review.', None, meta={'author': 'Hari'})
     assert res.review['verdict'] == 'request_changes'
     assert not replies

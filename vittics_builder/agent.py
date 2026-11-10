@@ -343,7 +343,8 @@ class AgentRuntime:
                 result.tool_log.append(f"{name} (failed)")
         result.text = text + (("\n\n(Vittics Builder could not use part of the reply: " + "; ".join(notes) + ")") if notes else "")
         if ("submit_review" in names and not chat_with and result.review is None
-                and result.completed and not meta.get("review_repair")):
+                and result.completed and not meta.get("review_repair")
+                and (meta.get("author") or meta.get("purpose") == "integration" or "submit_review" in instructions)):
             # A valid-looking narrative is not a verdict. Ask the same reviewer to
             # repair the rejected/missing action once, without editing or extra actions.
             diagnostic = "; ".join(notes) or "No structured review action was submitted."
