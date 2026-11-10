@@ -243,7 +243,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
                          'observations':co.observability.list(),'learning':co.learning.summary(),
                          'arena':co.db.all('SELECT id,project_id,status,winner,created_at FROM arena_runs ORDER BY id DESC LIMIT 50'),
                          'assessments':co.db.all('SELECT id,project_id,kind,status,revision,created_at FROM company_assessments ORDER BY id DESC LIMIT 50'),
-                         'marketplace':co.marketplace.list()})
+                         'marketplace':co.marketplace.list(), 'integrations':co.runtime.integrations.inventory()})
 
     @app.post('/api/workers')
     def add_worker(data: WorkerRequest,role: str = Depends(auth)):
@@ -699,6 +699,71 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
     @app.post("/api/agents/{agent_id}/messages")
     def send_message(agent_id: int, body: Message, role: str = Depends(auth)) -> dict:
         return guard(lambda: co.chat.send(agent_id, role, body.body, project_id=body.project_id or None))
+
+    def org_department_access(role, department):
+        if not isinstance(department, str):
+            raise HTTPException(400, 'Department must be an identifier.')
+        row = co.db.one('SELECT * FROM departments WHERE id=?', department)
+        if not row:
+            raise HTTPException(400, 'Unknown department.')
+        if role != 'ceo' and row['reports_to'] != 'cto':
+            raise HTTPException(403, 'That department reports to the CEO.')
+        return row
+
+    @app.get('/api/integrations')
+    def integration_inventory(role: str = Depends(auth)):
+        from .integrations import Integrations
+        return Integrations(co.s).inventory()
+
+    @app.get('/api/marketplace/export')
+    def export_package(name: str, role: str = Depends(auth)):
+        if role != 'ceo':raise HTTPException(403, 'Only the CEO exports packages.')
+        return guard(lambda: co.marketplace.export_bundle(name))
+
+    @app.post('/api/marketplace/import')
+    def import_package(data: dict, role: str = Depends(auth)):
+        if role != 'ceo':raise HTTPException(403, 'Only the CEO imports packages.')
+        return guard(lambda: co.marketplace.import_bundle(data.get('bundle'), data.get('sha256')))
+
+    @app.post('/api/organization/departments')
+    def create_department(data: dict, role: str = Depends(auth)):
+        if role != 'ceo':raise HTTPException(403, 'Only the CEO creates departments.')
+        guard(lambda: co.org.add_department(data['id'], data['name'], data['reports_to']))
+        return co.db.one('SELECT * FROM departments WHERE id=?', data['id'])
+
+    @app.patch('/api/organization/departments/{department}')
+    def update_department(department: str, data: dict, role: str = Depends(auth)):
+        row = org_department_access(role, department)
+        if role != 'ceo' and data.get('reports_to', row['reports_to']) != row['reports_to']:
+            raise HTTPException(403, 'Only the CEO changes department reporting lines.')
+        return guard(lambda: co.org.update_department(department, **data, by=co.s.human(role)))
+
+    @app.post('/api/organization/roles')
+    def create_role(data: dict, role: str = Depends(auth)):
+        org_department_access(role, data.get('department'))
+        guard(lambda: co.org.add_role(data['id'], data['department'], data['kind'], data['tools'],
+                                     data['prompt'], data.get('title')))
+        return co.org.role(data['id'])
+
+    @app.get('/api/organization/roles/{role_id}')
+    def read_role(role_id: str, role: str = Depends(auth)):
+        row = guard(lambda: co.org.role(role_id))
+        org_department_access(role, row['department'])
+        return row
+
+    @app.patch('/api/organization/roles/{role_id}')
+    def update_role(role_id: str, data: dict, role: str = Depends(auth)):
+        row = guard(lambda: co.org.role(role_id))
+        org_department_access(role, row['department'])
+        org_department_access(role, data.get('department', row['department']))
+        return guard(lambda: co.org.update_role(role_id, **data, by=co.s.human(role)))
+
+    @app.post('/api/agents/{agent_id}/reassign')
+    def reassign_agent(agent_id: int, data: dict, role: str = Depends(auth)):
+        managed(role, agent_id)
+        target = guard(lambda: co.org.role(data['role']))
+        org_department_access(role, target['department'])
+        return guard(lambda: co.org.reassign(agent_id, target['id'], by=co.s.human(role)))
 
     @app.post("/api/agents")
     def hire(body: Hire, role: str = Depends(auth)) -> dict:

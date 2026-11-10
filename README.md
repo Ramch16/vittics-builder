@@ -106,6 +106,9 @@ orchestration using a scripted library; it does not validate AI coding quality.
 
 ## Install
 
+For remote MCP connections, dashboard organization editing, portable team bundles
+and contributor examples, see [Extending Vittics Builder](docs/EXTENDING.md).
+
 For matched quality/cost trials and opt-in adaptive ticket reviews, see
 [delivery benchmarks](docs/BENCHMARKS.md). Reports preserve failed-run costs and
 unknown prices; no comparison with another orchestrator has been measured yet.

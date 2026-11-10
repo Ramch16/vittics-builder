@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "sha256": "001a2a47d61d314fb48c1a67afde8b78b2ee05d4d00bec9807e878b48047c1b3",
+  "manifest": {
+    "name": "examples/research",
+    "version": "1.0.0",
+    "description": "Research analyst starter team",
+    "departments": [
+      {
+        "id": "research",
+        "name": "Research",
+        "reports_to": "ceo"
+      }
+    ],
+    "roles": [
+      {
+        "id": "research_analyst",
+        "department": "research",
+        "kind": "advisor",
+        "title": "Research analyst",
+        "tools": [
+          "read_file",
+          "list_files"
+        ],
+        "prompt": "Review evidence and distinguish observations from assumptions."
+      }
+    ]
+  },
+  "assets": {
+    "research.md": "# Research analyst\n\nReview evidence and distinguish observations from assumptions. Cite source evidence and escalate uncertainty to a person.\n"
+  }
+}

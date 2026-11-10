@@ -333,6 +333,8 @@
       <section class="view" data-view="team" hidden>
         <div class="page-head"><div><h1>Team</h1><p id="team-sub"></p></div>
           <div class="actions" style="align-items:center"><label class="muted row" style="flex-wrap:nowrap"><input type="checkbox" id="show-fired" style="width:auto"> Former agents</label>
+            <button data-org-action="department" id="org-add-dept">Add department</button>
+            <button data-org-action="role">Add role</button>
             <button class="primary" data-hire>Hire</button></div></div>
         <div id="people"></div>
       </section>
@@ -351,6 +353,7 @@
         <div class="card"><h2>Incidents awaiting triage</h2><div id="ops-observations"></div></div>
         <div class="card"><h2>Learned approaches</h2><div id="ops-learning"></div></div>
         <div class="card"><h2>Competitions and reviews</h2><p class="muted">Executable competition and customer evidence is separate from board judgement.</p><div id="ops-evaluations"></div></div>
+        <div class="card"><h2>Connections</h2><p class="muted">Configured in org.yaml. Agents receive only the tools allowed for their role.</p><div id="ops-integrations"></div></div>
         <div class="card"><h2>Agent package catalog</h2><p class="muted">Installation requires the CEO and a reviewed content checksum.</p><div id="ops-marketplace"></div></div>
       </section>
       <section class="view" data-view="brain" hidden>
@@ -471,6 +474,13 @@
   <div class="row" style="margin-top:.6rem"><button class="primary" id="h-go">Hire</button><button data-close="hire-dlg">Cancel</button></div>
 </dialog>
 
+<dialog id="org-dlg" aria-labelledby="org-title"><form id="org-form">
+  <h2 id="org-title">Organization</h2><div id="org-fields"></div>
+  <p class="muted" id="org-note">Changes apply to future work. Running agents and unfinished assignments must be resolved before restructuring.</p>
+  <p class="fail" id="org-error" role="alert"></p>
+  <div class="actions"><button type="button" data-close="org-dlg">Cancel</button><button type="submit" class="primary">Save</button></div>
+</form></dialog>
+
 <dialog id="new-dlg">
   <h2>New ticket</h2>
   <label class="field"><span>Project</span><select id="n-project"></select></label>
@@ -546,9 +556,9 @@ $("action-cancel").onclick = () => $("action-dlg").close();
 $("action-dlg").addEventListener("cancel", () => pendingAction?.(null));
 $("action-dlg").addEventListener("close", () => pendingAction?.(null));
 
-async function api(path, body) {
+async function api(path, body, method) {
   const res = await fetch(path, {
-    method: body === undefined ? "GET" : "POST",
+    method: method || (body === undefined ? "GET" : "POST"),
     headers: { "X-Token": token, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -677,6 +687,7 @@ async function loadOperations() {
     paint('ops-learning',data.learning.map(t => `<p><b>${esc(t.strategy)}</b> · ${esc(t.task_kind)} · ${esc(t.signature)}: ${t.successes} of ${t.attempts} reviewed attempts succeeded${t.quality == null ? "" : ` · quality ${t.quality.toFixed(0)}/100`}</p>`).join('') || `<p class="muted">Reviewed work contributes evidence here.</p>`);
     paint('ops-evaluations',data.arena.map(a => `<div class="ev"><span class="grow">Competition ${a.id} · ${esc(a.status)} · winner: ${esc(a.winner || "none")}</span><button data-arena-detail="${a.id}">Evidence</button></div>`).join('') + data.assessments.map(a => `<div class="ev"><span class="grow">${esc(a.kind.replace(/_/g," "))} review ${a.id} · ${esc(a.status)}</span><button data-assessment-detail="${a.id}">Evidence</button></div>`).join('') || `<p class="muted">Run a competition, customer journey, security check or board review to collect evidence.</p>`);
     paint('ops-marketplace',data.marketplace.map(p => `<div class="ev"><span class="grow"><b>${esc(p.name)}</b> · ${p.installed ? "installed" : "review available"}<br><small>${esc(p.digest)}</small></span></div>`).join('') || `<p class="muted">Register a reviewed agent package to populate the catalog.</p>`);
+    paint('ops-integrations',(data.integrations || []).map(c => `<div class="ev"><span class="grow"><b>${esc(c.name)}</b> · ${esc(c.transport)} · ${c.enabled ? 'enabled' : 'disabled'}<br>${esc(c.roles.join(', '))} · ${c.tools.length} allowed tools${c.missing_credentials.length ? '<br>Missing configured credentials' : ''}</span></div>`).join('') || '<p class="muted">No MCP connections configured.</p>');
   } finally {operationsLoading=false;}
 }
 $("ops-refresh").onclick=()=>act(loadOperations);
@@ -1008,13 +1019,14 @@ function renderProject() {
 }
 
 function renderPeople(me) {
+  $('org-add-dept').hidden = me !== 'ceo';
   const showFired = $("show-fired").checked, staff = state.departments.flatMap(d => d.agents.filter(a => a.status !== "fired"));
   $("team-sub").textContent = `${staff.length} agents in ${state.departments.filter(d => d.agents.some(a => a.status !== "fired")).length} departments, led by ${state.humans.ceo} (CEO) and ${state.humans.cto} (CTO).`;
   paint("people", `<div class="dgrid">${state.departments.map(d => {
     const canManage = me === "ceo" || d.reports_to === "cto";
     const people = d.agents.filter(a => showFired || a.status !== "fired");
-    if (!people.length && !showFired) return "";
-    return `<div class="card"><div class="card-head"><h2>${esc(d.name)}</h2><span class="muted">Reports to ${esc(state.humans[d.reports_to])}</span></div>
+    return `<div class="card"><div class="card-head"><h2>${esc(d.name)}</h2><span class="muted">Reports to ${esc(state.humans[d.reports_to])}</span>${canManage ? `<button class="quiet" data-org-action="department" data-org-id="${esc(d.id)}">Edit department</button>` : ''}</div>
+      ${canManage ? `<details><summary>Roles</summary>${d.roles.map(r => `<p>${esc(r.title)} <button class="quiet" data-org-action="role" data-org-id="${esc(r.id)}">Edit role</button></p>`).join('')}</details>` : ''}
       ${people.map(a => {
         const s = a.score, cls = s == null ? "" : s < 45 ? "low" : s < 65 ? "mid" : "";
         const chat = (state.chats || []).find(c => c.agent_id === a.id);
@@ -1025,6 +1037,7 @@ function renderPeople(me) {
             <div class="muted ellip">${esc(a.role_title)} · ${s == null ? "no reviews yet" : `<span class="bar"><i class="${cls}" style="width:${s}%"></i></span>${s.toFixed(0)}`}</div>
             ${now ? `<div class="muted ellip">Working on <button class="quiet" style="padding:0" data-ticket="${now.id}">${esc(now.ticket)}</button></div>` : ""}</div>
           <div class="actions" style="flex-direction:column;align-items:flex-end;gap:.1rem">
+            ${canManage && a.status !== 'fired' ? `<button class="quiet" data-org-action="agent" data-org-id="${a.id}">Reassign</button>` : ''}
             ${a.status === "fired" ? "" : `<button class="quiet" style="padding:0" data-chat="${a.id}">${chat && chat.pending ? "Replying…" : "Message"}</button>
               <button class="quiet" style="padding:0" data-watch="${a.id}">Watch</button>`}
             ${!canManage ? "" : a.status === "fired" ? `<button class="quiet" style="padding:0" data-rehire="${a.id}">Rehire</button>` : `<button class="quiet" style="padding:0;color:var(--soft)" data-fire="${a.id}" data-name="${esc(a.name)}">Replace</button>`}
@@ -1108,6 +1121,51 @@ document.addEventListener("click", e => {
   if (e.target.closest("[data-hire]")) { $("hire-dlg").showModal(); return; }
   const cl = e.target.closest("[data-close]");
   if (cl) $(cl.dataset.close).close();
+});
+let orgEdit = null;
+async function openOrganization(action, id) {
+  const departments = state.departments.filter(d => state.you.role === 'ceo' || d.reports_to === 'cto');
+  const field = (label, name, value='', readonly=false) => `<label class="field"><span>${label}</span><input id="org-${name}" value="${esc(value)}" ${readonly ? 'readonly' : ''} required></label>`;
+  const select = (label, name, options, current, disabled=false) => `<label class="field"><span>${label}</span><select id="org-${name}" ${disabled ? 'disabled' : ''}>${options.map(([v,t]) => `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+  orgEdit = {action, id}; $('org-error').textContent = '';
+  $('org-title').textContent = action === 'agent' ? 'Reassign agent' : `${id ? 'Edit' : 'Add'} ${action}`;
+  if (action === 'department') {
+    const d = state.departments.find(d => d.id === id) || {id:'',name:'',reports_to:'cto'};
+    $('org-fields').innerHTML = field('Identifier','id',d.id,!!id) + field('Name','name',d.name)
+      + select('Reports to','reports',[['ceo','CEO'],['cto','CTO']],d.reports_to,state.you.role !== 'ceo');
+  } else if (action === 'role') {
+    const r = id ? await api(`/api/organization/roles/${encodeURIComponent(id)}`) : {id:'',title:'',department:departments[0]?.id,kind:'builder',tools:'[]',prompt:''};
+    $('org-fields').innerHTML = field('Identifier','id',r.id,!!id) + field('Title','name',r.title)
+      + select('Department','department',departments.map(d => [d.id,d.name]),r.department)
+      + select('Work type','kind',['product','designer','planner','builder','reviewer','qa','auditor','advisor','customer'].map(k=>[k,k]),r.kind,!!id)
+      + `<label class="field"><span>Responsibilities</span><textarea id="org-prompt" required>${esc(r.prompt)}</textarea></label>`
+      + `<label class="field"><span>Allowed tools (comma separated; blank for none)</span><input id="org-tools" value="${esc(JSON.parse(r.tools).join(', '))}"></label>`;
+  } else {
+    const a = state.departments.flatMap(d=>d.agents).find(a=>a.id === Number(id));
+    $('org-fields').innerHTML = `<p>Choose a role for ${esc(a.name)}. Their name, model, seat identity and history are preserved.</p>`
+      + select('Destination role','role',departments.flatMap(d=>d.roles.map(r=>[r.id,`${d.name} · ${r.title}`])),a.role);
+  }
+  $('org-dlg').showModal();
+}
+$('org-form').onsubmit = async e => {
+  e.preventDefault(); if (!$('org-form').reportValidity()) return;
+  const {action,id} = orgEdit;
+  const value = name => $(`org-${name}`).value.trim();
+  let path, data, method = id ? 'PATCH' : 'POST';
+  if (action === 'department') {
+    path = '/api/organization/departments' + (id ? `/${encodeURIComponent(id)}` : '');
+    data = {name:value('name'),reports_to:value('reports')}; if (!id) data.id=value('id');
+  } else if (action === 'role') {
+    path = '/api/organization/roles' + (id ? `/${encodeURIComponent(id)}` : '');
+    data = {title:value('name'),department:value('department'),prompt:value('prompt'),tools:value('tools').split(',').map(t=>t.trim()).filter(Boolean)};
+    if (!id) Object.assign(data,{id:value('id'),kind:value('kind')});
+  } else {path=`/api/agents/${id}/reassign`;data={role:value('role')};method='POST';}
+  try {await api(path,data,method);$('org-dlg').close();await refresh(true);}
+  catch(err) {$('org-error').textContent=err.message;}
+};
+document.addEventListener('click', e => {
+  const b=e.target.closest('[data-org-action]');
+  if (b) act(()=>openOrganization(b.dataset.orgAction,b.dataset.orgId));
 });
 $("a-project").onchange = renderActivity;
 let errorTimer = null;

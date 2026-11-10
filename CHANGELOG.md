@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- Add role-scoped remote Streamable HTTP MCP connections, environment-bound authentication headers,
+  disabled-server enforcement and a redacted connection inventory; existing stdio servers still work.
+- Add dashboard/API/CLI department and role editing and agent reassignment, with CEO/CTO scope checks
+  and guards against restructuring running agents or moving unfinished assignments.
+- Add checksum-pinned team package import/export, optional department definitions, two example teams
+  and an MCP server starter. See `docs/EXTENDING.md`; no public marketplace or community size is implied.
 - Add independent, persistent CEO/CTO manual approval switches per project. OFF delegates routine
   decisions and verified final sign-off; ON overrides Autopilot and requires manual approval.
   Existing role permissions, exception handling and release verification remain enforced.

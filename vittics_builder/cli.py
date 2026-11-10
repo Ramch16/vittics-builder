@@ -129,7 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument('kind',choices=['customers','board','red-team','security','dependencies']);p.add_argument('project',type=int)
     p.add_argument('--journeys');p.add_argument('--check',action='append')
     p = sub.add_parser('marketplace',help='Review and install SHA256-pinned agent packages')
-    p.add_argument('action',choices=['list','register','install']);p.add_argument('--bundle');p.add_argument('--name');p.add_argument('--sha256')
+    p.add_argument('action',choices=['list','register','install','import','export']);p.add_argument('--bundle');p.add_argument('--name');p.add_argument('--sha256');who(p)
+    p=sub.add_parser('integrations', help='Inspect MCP configuration or discover allowed tools without a model call')
+    p.add_argument('--server');p.add_argument('--role');p.add_argument('--project',type=int)
     p = sub.add_parser('federation',help='Exchange signed scoped proposals, observations, or results')
     p.add_argument('action',choices=['sign','send','receive']);p.add_argument('--peer');p.add_argument('--kind');p.add_argument('--payload',required=True)
     sub.add_parser("status", help="Projects and tasks")
@@ -245,6 +247,9 @@ def main(argv: list[str] | None = None) -> int:
     p = org.add_parser("rehire"); p.add_argument("agent"); p.add_argument("--note", default=""); who(p)
     p = org.add_parser("add-dept"); p.add_argument("id"); p.add_argument("--name"); p.add_argument("--reports-to", choices=["ceo", "cto"], default="cto")
     p = org.add_parser("remove-dept"); p.add_argument("id")
+    p = org.add_parser('update-dept');p.add_argument('id');p.add_argument('--name');p.add_argument('--reports-to',choices=['ceo','cto']);who(p)
+    p = org.add_parser('update-role');p.add_argument('id');p.add_argument('--dept');p.add_argument('--title');p.add_argument('--prompt');p.add_argument('--tools');who(p)
+    p = org.add_parser('reassign');p.add_argument('agent');p.add_argument('--role',required=True);who(p)
     p = org.add_parser("sync", help="Add departments, roles and seats this company is missing")
     p.add_argument("--from", dest="source", help="Org file to add from (default: the built-in full company)"); who(p)
     p = org.add_parser("add-role"); p.add_argument("id"); p.add_argument("--dept", required=True)
@@ -326,8 +331,31 @@ def _dispatch(args) -> int:
         elif args.kind=='dependencies':result=co.security.dependencies(args.project)
         else:result=co.security.scan(args.project)
         print(json.dumps(result,indent=2))
+    elif args.cmd=='integrations':
+        from .integrations import Integrations
+        adapter=Integrations(co.s)
+        if args.server:
+            if not args.role or args.project is None:raise ValueError('Discovery needs --role and --project.')
+            print(adapter.call(args.role,'mcp_list_tools',{'server':args.server},co.pipeline.workspace(co.pipeline.project(args.project))))
+        else:print(json.dumps(adapter.inventory(),indent=2))
     elif args.cmd=='marketplace':
+        if args.action != 'list' and role != 'ceo':raise PermissionError('Only the CEO manages portable packages.')
         if args.action=='list':result=co.marketplace.list()
+        elif args.action=='export':
+            if not args.name:raise ValueError('Export needs --name.')
+            result=co.marketplace.export_bundle(args.name)
+            if args.bundle:
+                try:
+                    with Path(args.bundle).open('x',encoding='utf-8') as output:
+                        json.dump(result,output,indent=2)
+                except FileExistsError:
+                    raise ValueError('Export refuses an existing output file.') from None
+                result={'exported':args.bundle,'sha256':result['sha256']}
+        elif args.action=='import':
+            if not args.bundle or not args.sha256:raise ValueError('Import needs --bundle and --sha256.')
+            path=Path(args.bundle)
+            if path.stat().st_size>1000000:raise ValueError('Bundle file exceeds 1MB.')
+            result=co.marketplace.import_bundle(json.loads(path.read_text(encoding='utf-8')),args.sha256)
         elif args.action=='register':
             if not args.bundle:raise ValueError('Registration needs a bundle JSON file.')
             bundle=json.loads(Path(args.bundle).read_text(encoding="utf-8"));result=co.marketplace.register(bundle['manifest'],bundle['assets'])
@@ -760,8 +788,27 @@ def _ticket(co: Company, args, role: str) -> None:
 def _org(co: Company, args, role: str) -> None:
     cmd = args.org_cmd or "show"
     by = co.s.human(role)
+    def access(department):
+        row=co.db.one('SELECT * FROM departments WHERE id=?',department)
+        if not row:raise OrgError('Unknown department.')
+        if role!='ceo' and row['reports_to']!='cto':raise PermissionError('That department reports to the CEO.')
+        return row
     if cmd == "show":
         _print_org(co, getattr(args, "all", False))
+    elif cmd == 'update-dept':
+        row=access(args.id)
+        if role!='ceo' and args.reports_to and args.reports_to!=row['reports_to']:
+            raise PermissionError('Only the CEO changes reporting lines.')
+        print(json.dumps(co.org.update_department(args.id,name=args.name,reports_to=args.reports_to,by=by),indent=2))
+    elif cmd == 'update-role':
+        row=co.org.role(args.id);access(row['department']);access(args.dept or row['department'])
+        print(json.dumps(co.org.update_role(args.id,department=args.dept,title=args.title,prompt=args.prompt,
+                                          tools=args.tools.split(',') if args.tools is not None else None,by=by),indent=2))
+    elif cmd == 'reassign':
+        agent=co.org.agent(args.agent)
+        if not co.can_manage(role,agent):raise PermissionError('That agent reports to the CEO.')
+        access(co.org.role(args.role)['department'])
+        print(json.dumps(co.org.reassign(args.agent,args.role,by=by),indent=2))
     elif cmd == "hire":
         role_row = co.org.role(args.role)
         if role != "ceo" and co.db.one("SELECT reports_to FROM departments WHERE id=?", role_row["department"])["reports_to"] != "cto":
