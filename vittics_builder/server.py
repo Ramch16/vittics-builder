@@ -733,17 +733,19 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
 
     @app.patch('/api/organization/departments/{department}')
     def update_department(department: str, data: dict, role: str = Depends(auth)):
-        row = org_department_access(role, department)
-        if role != 'ceo' and data.get('reports_to', row['reports_to']) != row['reports_to']:
-            raise HTTPException(403, 'Only the CEO changes department reporting lines.')
-        return guard(lambda: co.org.update_department(department, **data, by=co.s.human(role)))
+        with co.db.lock:
+            row = org_department_access(role, department)
+            if role != 'ceo' and data.get('reports_to', row['reports_to']) != row['reports_to']:
+                raise HTTPException(403, 'Only the CEO changes department reporting lines.')
+            return guard(lambda: co.org.update_department(department, **data, by=co.s.human(role)))
 
     @app.post('/api/organization/roles')
     def create_role(data: dict, role: str = Depends(auth)):
-        org_department_access(role, data.get('department'))
-        guard(lambda: co.org.add_role(data['id'], data['department'], data['kind'], data['tools'],
-                                     data['prompt'], data.get('title')))
-        return co.org.role(data['id'])
+        with co.db.lock:
+            org_department_access(role, data.get('department'))
+            guard(lambda: co.org.add_role(data['id'], data['department'], data['kind'], data['tools'],
+                                         data['prompt'], data.get('title')))
+            return co.org.role(data['id'])
 
     @app.get('/api/organization/roles/{role_id}')
     def read_role(role_id: str, role: str = Depends(auth)):
@@ -753,17 +755,19 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
 
     @app.patch('/api/organization/roles/{role_id}')
     def update_role(role_id: str, data: dict, role: str = Depends(auth)):
-        row = guard(lambda: co.org.role(role_id))
-        org_department_access(role, row['department'])
-        org_department_access(role, data.get('department', row['department']))
-        return guard(lambda: co.org.update_role(role_id, **data, by=co.s.human(role)))
+        with co.db.lock:
+            row = guard(lambda: co.org.role(role_id))
+            org_department_access(role, row['department'])
+            org_department_access(role, data.get('department', row['department']))
+            return guard(lambda: co.org.update_role(role_id, **data, by=co.s.human(role)))
 
     @app.post('/api/agents/{agent_id}/reassign')
     def reassign_agent(agent_id: int, data: dict, role: str = Depends(auth)):
-        managed(role, agent_id)
-        target = guard(lambda: co.org.role(data['role']))
-        org_department_access(role, target['department'])
-        return guard(lambda: co.org.reassign(agent_id, target['id'], by=co.s.human(role)))
+        with co.db.lock:
+            managed(role, agent_id)
+            target = guard(lambda: co.org.role(data['role']))
+            org_department_access(role, target['department'])
+            return guard(lambda: co.org.reassign(agent_id, target['id'], by=co.s.human(role)))
 
     @app.post("/api/agents")
     def hire(body: Hire, role: str = Depends(auth)) -> dict:

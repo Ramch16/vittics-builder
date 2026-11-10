@@ -224,3 +224,34 @@ def test_header_binding_cannot_bypass_child_environment_scrubbing(co,monkeypatch
                     'headers_env':{'X-Api-Key':'SERVICE_VALUE'}},Workspace(co.s.root/'ws')):
             pytest.fail('Unsafe header binding entered')
     with pytest.raises(ToolError,match='secret label'):asyncio.run(enter())
+
+
+def test_reporting_line_cannot_change_between_authorization_and_role_edit(co,monkeypatch):
+    import threading
+    client=TestClient(create_app(co,{'ceo':'ceo','cto':'cto'}))
+    entered=threading.Event();release=threading.Event();moved=threading.Event();attempted=threading.Event()
+    original=co.org.update_role
+    result={}
+    def pause(*args,**kwargs):
+        entered.set()
+        assert release.wait(5)
+        return original(*args,**kwargs)
+    monkeypatch.setattr(co.org,'update_role',pause)
+    def edit():
+        result['response']=client.patch('/api/organization/roles/backend_engineer',json={'title':'API specialist'},headers={'X-Token':'cto'})
+    def move():
+        attempted.set()
+        co.org.update_department('engineering',reports_to='ceo')
+        moved.set()
+    edit_thread=threading.Thread(target=edit);move_thread=threading.Thread(target=move)
+    edit_thread.start()
+    try:
+        assert entered.wait(5)
+        move_thread.start();assert attempted.wait(5)
+        assert not moved.wait(.1)
+    finally:
+        release.set();edit_thread.join(timeout=5)
+        if move_thread.ident:move_thread.join(timeout=5)
+    assert result['response'].status_code==200
+    assert moved.is_set()
+    assert client.patch('/api/organization/roles/backend_engineer',json={'title':'Denied'},headers={'X-Token':'cto'}).status_code==403
