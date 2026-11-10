@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- Add offline `benchmark-compare` reports for matched independent trials, retaining failed/incomplete
+  costs and unknown prices. See `docs/BENCHMARKS.md` for the protocol and observation format.
+- Add opt-in adaptive ticket review based on actual changed paths and task risk hints. Plain docs
+  receive one reviewer; source/unknown changes receive code review and QA; sensitive work receives
+  all staffed reviewers and QA, including on small projects. Preserve path evidence across resumes.
+- Route using total recorded cost per reviewed success rather than cost per evaluation, so failed
+  attempts count toward cost effectiveness. No measured savings or comparative superiority claimed.
 - **CLI engines no longer inherit your secrets.** Claude Code, Codex and the other CLIs used to receive the
   whole server environment except `ANTHROPIC_API_KEY`, including the CEO and CTO dashboard tokens and other
   providers' keys. They now get the same scrubbed environment as agents' commands, plus only the login

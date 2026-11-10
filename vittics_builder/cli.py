@@ -106,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser('benchmark', help='Export recorded project metrics as JSON; does not run agents')
     p.add_argument('project', type=int)
     p.add_argument('--cutoff', help='Timezone-qualified ISO timestamp (default: now)')
+    p = sub.add_parser('benchmark-compare', help='Summarize matched independent trials; never runs agents')
+    p.add_argument('path', help='Trial JSON file; see docs/BENCHMARKS.md')
     p = sub.add_parser('repo-index', help='Inspect Python symbols/imports without executing repository code')
     p.add_argument('path')
     p.add_argument('--changed', nargs='*', help='Report conservative impact for repository-relative paths')
@@ -259,6 +261,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch(args) -> int:
+    if args.cmd == 'benchmark-compare':
+        from .comparison import compare
+        print(json.dumps(compare(json.loads(Path(args.path).read_text(encoding='utf-8'))), indent=2))
+        return 0
     if args.cmd == 'repo-index':
         from .repository import index, impact
         report = index(args.path)

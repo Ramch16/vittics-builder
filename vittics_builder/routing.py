@@ -43,7 +43,9 @@ class ModelRouter:
             rate = price(self.s, model)
             cost = (sum(rate) / 100 if rate is not None else 1)
             if e and e['priced'] and e['evaluated']:
-                cost = e['cost'] / e['evaluated']
+                # Include unsuccessful attempts in the spend numerator. Dividing
+                # by evaluations rewards cheap retries even when few are accepted.
+                cost = e['cost'] / max(e['successes'], 1)
             return .6 * success + .3 * quality - .05 * math.log1p(latency) - .05 * math.log1p(cost)
         model = max(candidates, key=rank)   # deterministic configured order breaks ties
         return model, f'Role/kind rule; reviewed quality, success, latency and estimated cost ({kind})'

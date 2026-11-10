@@ -1088,11 +1088,16 @@ class Pipeline:
             self._approval(pid, "hire", boss, f"Hire another {role['title']}?", summary,
                            {"role": role["id"], "waiting": row["n"], "staff": len(staff)})
 
-    def _checkers(self, pid: int | None = None) -> list[dict]:
+    def _checkers(self, pid: int | None = None, *, task=None, paths=None) -> list[dict]:
         """Roles that check each ticket, by review_mode (light for a small project). Fewer checks cost less;
         release QA always runs, and the audits for standard projects."""
         staffed = self.org.staffed_roles("reviewer", "qa")
         mode = "light" if pid is not None and self.small(pid) else self.s.review_mode
+        if self.s.review_mode == 'adaptive':
+            from .review_policy import review_level
+            mode, reason = review_level(task or {}, paths or [])
+            if pid is not None:
+                self.db.log('review_policy', f'Adaptive review: {mode}. {reason}.', pid)
         if mode == "thorough":
             return staffed
         reviewers = sorted((r for r in staffed if r["kind"] == "reviewer"), key=lambda r: r["id"] != "code_reviewer")
@@ -1190,6 +1195,7 @@ class Pipeline:
                                 route_id=checkpoint.get("route_id"))
                 self.db.log("work", f"Resuming review of [{task['key']}] without rebuilding unchanged work.", pid)
             else:
+                review_base = ws.git('rev-parse', 'HEAD').strip()
                 try:
                     self._reserve_builder_start(pid, task['id'])
                 except PipelineError:
@@ -1208,9 +1214,15 @@ class Pipeline:
 
             changed = ws.changed_files()
             ws.commit(f"[{task['key']}] candidate for review")
+            # Retain the original path evidence across review-only resumptions.
+            # Disable rename detection so moving source into docs cannot lower review.
+            review_paths = (checkpoint.get('review_paths', []) if checkpoint else
+                            [p for p in ws.git('diff', '--no-renames', '--name-only', '-z',
+                                               review_base, 'HEAD').split('\0') if p])
             self.db.run("UPDATE tasks SET result=? WHERE id=?", json.dumps({
                 "review_checkpoint": 1, "tree": ws.git("rev-parse", "HEAD^{tree}").strip(),
                 "text": res.text, "completed": res.completed, "route_id": res.route_id,
+                "review_paths": review_paths,
                 "assignment": {k: task[k] for k in ("title", "description", "role", "feedback")}}), task["id"])
             self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
             note(self.db, task["id"], agent["name"], "Submitted for review.\n" + (res.text or "")[:1500])
@@ -1225,9 +1237,12 @@ class Pipeline:
                 note(self.db, task["id"], "Vittics Builder", "Ran the acceptance checks on this computer: "
                      + ", ".join(f"{c['id']} {'passed' if c['passed'] else 'FAILED'}" for c in report["checks"])
                      + ("" if report["checks"] else "none defined") + ".", kind="comment")
-            for check_role in self._checkers(pid):
+            for check_role in self._checkers(pid, task=task, paths=review_paths):
                 checker = self.org.pick(role=check_role["id"], exclude=agent["id"])
                 if not checker:
+                    if self.s.review_mode == 'adaptive':
+                        raise PipelineError(f"Adaptive review requires an independent {check_role['title']}. "
+                                            "Review is incomplete; restore staffing before resuming.")
                     continue
                 source = "qa" if check_role["kind"] == "qa" else "peer"
                 note(self.db, task["id"], agent["name"], f"Handed to {checker['name']}, "
