@@ -8,7 +8,7 @@ import os
 import re
 from datetime import timedelta
 
-from .tools import INTEGRATION_SPECS, MAX_OUTPUT, SECRET_ENV, ToolError
+from .tools import INTEGRATION_SPECS, MAX_OUTPUT, command_environment, ToolError
 
 
 class Integrations:
@@ -71,7 +71,7 @@ class Integrations:
         command = config.get('command')
         if not isinstance(command, str) or not command:
             raise ToolError('MCP server needs a trusted command in org.yaml.')
-        environment = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}
+        environment = command_environment()
         for var in config.get('env_names') or []:
             if not isinstance(var, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', var):
                 raise ToolError('MCP env_names must be environment variable names.')

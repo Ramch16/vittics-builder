@@ -43,11 +43,11 @@ jobs:
           python-version: "3.12"
       - name: Install browser test dependencies
         run: |
-          pip install -e ".[dev,browser]"
+          pip install -e ".[dev,browser,mcp]"
           python -m playwright install --with-deps chromium
       - name: Configure git for test projects
         run: |
           git config --global user.email "ci@vittics.local"
           git config --global user.name "Vittics Builder CI"
       - name: Test browser integrations, operations and desktop dialogs
-        run: python -m pytest tests/test_dashboard_dialogs.py tests/test_integrations.py tests/test_company_os.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_dashboard_dialogs.py tests/test_integrations.py tests/test_company_os.py -q -rs -p no:cacheprovider

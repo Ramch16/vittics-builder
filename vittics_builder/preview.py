@@ -24,7 +24,7 @@ from pathlib import Path
 
 from .db import now
 from .platforms import WINDOWS, shell_command
-from .tools import SECRET_ENV
+from .tools import command_environment
 
 
 def free_port() -> int:
@@ -116,7 +116,7 @@ class Previews:
         self.logs.mkdir(parents=True, exist_ok=True)
         log_path = self.logs / f"{pid}-{tag}.log"
         port = free_port()
-        env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}
+        env = command_environment()
         env.update(self.co.vault.env(pid))
         env.update(PORT=str(port), HOST="127.0.0.1")
         timeout = float(timeout or (self.s.raw.get("preview") or {}).get("start_timeout_seconds", 120))

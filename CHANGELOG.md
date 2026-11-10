@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- Fix five documented command-boundary regressions: refuse literal parent traversal and quoted
+  absolute host operands, scrub inherited credential-bearing URLs, and disable hooks/fsmonitor and
+  inherited Git configuration for company Git operations. Local command policy remains a guard,
+  not OS isolation; use Docker for untrusted shell execution.
+- Install the MCP SDK in browser integration CI so its optional test runs alongside Chromium tests.
 - Add offline `benchmark-compare` reports for matched independent trials, retaining failed/incomplete
   costs and unknown prices. See `docs/BENCHMARKS.md` for the protocol and observation format.
 - Add opt-in adaptive ticket review based on actual changed paths and task risk hints. Plain docs

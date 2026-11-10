@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import threading
@@ -11,6 +12,19 @@ from pathlib import Path
 MAX_OUTPUT = 12_000
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache", "dist", "build"}
 SECRET_ENV = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", re.I)
+URL_CREDENTIAL = re.compile(r"[a-z][a-z0-9+.-]*://[^/\s]*@|[?&;](?:password|token|api_key|secret)=", re.I)
+
+
+def secret_environment(name: str, value: str) -> bool:
+    """Catch credentials in connection URLs as well as secret-looking names."""
+    return bool(SECRET_ENV.search(name) or URL_CREDENTIAL.search(value))
+
+
+def command_environment(base=None) -> dict:
+    return {k: v for k, v in (os.environ if base is None else base).items()
+            if not secret_environment(k, v)}
+
+
 # Agents work in parallel git worktrees that share one object store. Git bookkeeping is
 # quick next to agent work, so it is serialised rather than risking ref-lock races.
 _GIT_LOCK = threading.RLock()
@@ -263,9 +277,34 @@ class Workspace:
         for pattern, why in DENIED:
             if re.search(pattern, command):
                 raise ToolError(f"Command refused by company policy ({why}).")
+        # Check literal operands after shell unquoting, rather than relying only
+        # on regexes over raw command text. This is still a policy guard, not an
+        # OS sandbox: generated/interpreted paths require Docker confinement.
+        try:
+            tokens = shlex.split(command, posix=os.name != 'nt')
+        except ValueError as exc:
+            raise ToolError('Command has invalid shell quoting.') from exc
+        for token in tokens:
+            operand = token.strip('\"\'')
+            if '=' in operand and not operand.startswith(('http://', 'https://')):
+                operand = operand.split('=', 1)[1]
+            if '://' in operand:
+                continue
+            path = Path(os.path.expanduser(operand))
+            if '..' in path.parts:
+                raise ToolError('Command refused by company policy (parent-directory traversal).')
+            if self.mode == 'docker' and (operand == '/work' or operand.startswith('/work/')):
+                continue  # Container mount, not an absolute host operand.
+            if (path.is_absolute() or path.anchor) and operand not in (os.devnull, '/dev/null'):
+                target = path.resolve()
+                if target != self.root and self.root not in target.parents:
+                    # Absolute executables may be invoked; file operands may not
+                    # name host files outside the project.
+                    if token != tokens[0] or not os.access(target, os.X_OK) or not target.is_file():
+                        raise ToolError('Command refused by company policy (path outside workspace).')
         cap = int(max_seconds or self.timeout)
         timeout = min(int(timeout_seconds or cap), cap)
-        env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}
+        env = command_environment()
         env.update(extra_env or {})
         if self.mode == "docker":
             argv = ["docker", "run", "--rm", "-v", f"{self.root}:/work", "-w", "/work"]
@@ -305,8 +344,10 @@ class Workspace:
     def git(self, *args: str) -> str:
         with _GIT_LOCK:
             proc = subprocess.run(
-                ["git", "-c", "user.name=Vittics Builder", "-c", "user.email=vittics@localhost", *args],
+                ["git", "-c", "user.name=Vittics Builder", "-c", "user.email=vittics@localhost",
+                 "-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false", *args],
                 cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                env={k: v for k, v in command_environment().items() if not k.startswith('GIT_')},
             )
         if proc.returncode:
             raise ToolError(f"Git {args[0]} failed: {_clip(proc.stderr)}")
