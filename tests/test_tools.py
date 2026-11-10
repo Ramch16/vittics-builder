@@ -50,6 +50,9 @@ def test_environment_scrubbing_checks_values_and_preserves_explicit_product_env(
     import sys
     from vittics_builder.tools import command_environment
     assert command_environment({'PATH': '/usr/bin', 'SITE_URL': 'https://example.com',
+                                'VITTICS_GITHUB_AUTHORIZATION': 'Bearer remote-token',
+                                'SERVICE_HEADER': 'Bearer unlabelled-token',
+                                'BASIC_HEADER': 'Basic dXNlcjpwYXNz',
                                 'DATABASE_URL': 'postgres://user:pass@host/db',
                                 'SERVICE_URL': 'https://host/api?token=private'}) == {
                                     'PATH': '/usr/bin', 'SITE_URL': 'https://example.com'}

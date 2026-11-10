@@ -11,13 +11,14 @@ from pathlib import Path
 
 MAX_OUTPUT = 12_000
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache", "dist", "build"}
-SECRET_ENV = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", re.I)
+SECRET_ENV = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE", re.I)
 URL_CREDENTIAL = re.compile(r"[a-z][a-z0-9+.-]*://[^/\s]*@|[?&;](?:password|token|api_key|secret)=", re.I)
 
 
 def secret_environment(name: str, value: str) -> bool:
     """Catch credentials in connection URLs as well as secret-looking names."""
-    return bool(SECRET_ENV.search(name) or URL_CREDENTIAL.search(value))
+    return bool(SECRET_ENV.search(name) or URL_CREDENTIAL.search(value)
+                or re.match(r'^(?:Bearer|Basic)\s+\S', value, re.I))
 
 
 def command_environment(base=None) -> dict:
