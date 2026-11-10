@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- Default new companies to conservative adaptive review; existing org.yaml settings remain unchanged.
+- Pause dashboard polling in hidden tabs and coalesce slow requests, while refreshing after actions.
+- Batch agent presence lookups into four queries regardless of team size.
+- Add bounded wall-clock stage timings to Operations and authenticated /api/performance. Timings include
+  failed attempts and do not replace acceptance evidence or imply measured end-to-end speed gains.
 - Add role-scoped remote Streamable HTTP MCP connections, environment-bound authentication headers,
   disabled-server enforcement and a redacted connection inventory; existing stdio servers still work.
 - Add dashboard/API/CLI department and role editing and agent reassignment, with CEO/CTO scope checks

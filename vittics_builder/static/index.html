@@ -353,6 +353,7 @@
         <div class="card"><h2>Incidents awaiting triage</h2><div id="ops-observations"></div></div>
         <div class="card"><h2>Learned approaches</h2><div id="ops-learning"></div></div>
         <div class="card"><h2>Competitions and reviews</h2><p class="muted">Executable competition and customer evidence is separate from board judgement.</p><div id="ops-evaluations"></div></div>
+        <div class="card"><h2>Stage timings</h2><div id="ops-performance"></div></div>
         <div class="card"><h2>Connections</h2><p class="muted">Configured in org.yaml. Agents receive only the tools allowed for their role.</p><div id="ops-integrations"></div></div>
         <div class="card"><h2>Agent package catalog</h2><p class="muted">Installation requires the CEO and a reviewed content checksum.</p><div id="ops-marketplace"></div></div>
       </section>
@@ -585,18 +586,39 @@ async function act(fn) {
   try { await fn(); await refresh(true); } catch (e) { if (e.message !== "unauthorized") $("error").textContent = e.message; }
 }
 
-async function refresh(force) {
+let refreshPromise = null;
+async function refresh(force = false) {
   if (!token) return signOut();
-  const busy = ["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement?.tagName);
-  try { state = await api("/api/state"); } catch { return; }
+  // Mutations must wait for an older snapshot, then fetch their own fresh state.
+  if (refreshPromise) {
+    await refreshPromise;
+    if (force === true) return refresh(true);
+    return;
+  }
+  if (document.hidden && force !== true) return;
+  refreshPromise = refreshState(force === true);
+  try { await refreshPromise; } finally { refreshPromise = null; }
+}
+async function refreshState(force) {
+  const editing = () => ["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement?.tagName);
+  const requestToken = token;
+  let next;
+  try { next = await api("/api/state"); } catch { return; }
+  if (token !== requestToken) return;
+  state = next;
   $("signin").hidden = true; $("app").hidden = false;
-  if (openChatId) loadChat(openChatId).catch(() => {});   // only redraws the messages, never the input
-  if (watching) openConsole(watching).catch(() => {});      // appends new steps; never touches what you type
-  if (reportFor) openReports(reportFor).catch(() => {});
-  if (feedbackFor && !["fb-body", "fb-source"].includes(document.activeElement?.id)) openFeedback(feedbackFor).catch(() => {});
-  if (busy && !force) return;             // don't redraw under someone typing
-  render();
-  if (openTicketId && !force) loadTicket(openTicketId).catch(() => {});
+  // Paint the main snapshot immediately; slower panels should not delay it.
+  if (!editing() || force) render();
+  // Await panel requests too: a slow connection must not accumulate polls.
+  await Promise.allSettled([
+    openChatId ? loadChat(openChatId) : Promise.resolve(),
+    watching ? openConsole(watching) : Promise.resolve(),
+    reportFor ? openReports(reportFor) : Promise.resolve(),
+    feedbackFor && !["fb-body", "fb-source"].includes(document.activeElement?.id)
+      ? openFeedback(feedbackFor) : Promise.resolve(),
+  ]);
+  if (token !== requestToken || (editing() && !force)) return;
+  if (openTicketId && !force) await loadTicket(openTicketId).catch(() => {});
 }
 
 
@@ -687,6 +709,10 @@ async function loadOperations() {
     paint('ops-learning',data.learning.map(t => `<p><b>${esc(t.strategy)}</b> · ${esc(t.task_kind)} · ${esc(t.signature)}: ${t.successes} of ${t.attempts} reviewed attempts succeeded${t.quality == null ? "" : ` · quality ${t.quality.toFixed(0)}/100`}</p>`).join('') || `<p class="muted">Reviewed work contributes evidence here.</p>`);
     paint('ops-evaluations',data.arena.map(a => `<div class="ev"><span class="grow">Competition ${a.id} · ${esc(a.status)} · winner: ${esc(a.winner || "none")}</span><button data-arena-detail="${a.id}">Evidence</button></div>`).join('') + data.assessments.map(a => `<div class="ev"><span class="grow">${esc(a.kind.replace(/_/g," "))} review ${a.id} · ${esc(a.status)}</span><button data-assessment-detail="${a.id}">Evidence</button></div>`).join('') || `<p class="muted">Run a competition, customer journey, security check or board review to collect evidence.</p>`);
     paint('ops-marketplace',data.marketplace.map(p => `<div class="ev"><span class="grow"><b>${esc(p.name)}</b> · ${p.installed ? "installed" : "review available"}<br><small>${esc(p.digest)}</small></span></div>`).join('') || `<p class="muted">Register a reviewed agent package to populate the catalog.</p>`);
+    const perf = data.performance || {stages: [], note: ""};
+    paint('ops-performance', `<p class="muted">${esc(perf.note)}</p>` + (perf.stages.length
+      ? `<div style="overflow:auto"><table><thead><tr><th>Stage</th><th>Runs</th><th>Average</th><th>95th percentile</th><th>Errors</th></tr></thead><tbody>${perf.stages.map(s => `<tr><td>${esc(s.stage)}</td><td>${s.samples}</td><td>${s.mean_seconds.toFixed(1)}s</td><td>${s.p95_seconds.toFixed(1)}s</td><td>${s.errors}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="muted">Timing measurements appear as agents and acceptance checks finish.</p>'));
     paint('ops-integrations',(data.integrations || []).map(c => `<div class="ev"><span class="grow"><b>${esc(c.name)}</b> · ${esc(c.transport)} · ${c.enabled ? 'enabled' : 'disabled'}<br>${esc(c.roles.join(', '))} · ${c.tools.length} allowed tools${c.missing_credentials.length ? '<br>Missing configured credentials' : ''}</span></div>`).join('') || '<p class="muted">No MCP connections configured.</p>');
   } finally {operationsLoading=false;}
 }
@@ -1664,7 +1690,14 @@ document.addEventListener("click", e => {
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 route();
 refresh(true);
-setInterval(refresh, 4000);
+// Schedule after completion, rather than starting overlapping interval requests.
+async function pollState() {
+  try { await refresh(); } finally { setTimeout(pollState, 4000); }
+}
+setTimeout(pollState, 4000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh().catch(() => {});
+});
 </script>
 </body>
 </html>

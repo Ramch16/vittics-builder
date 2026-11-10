@@ -670,6 +670,8 @@ vittics-builder chat Sony --as cto                      # read the conversation
 
 ## Parallel work and hiring for workload
 
+For stage timings, dashboard responsiveness and review configuration, see [Performance](docs/PERFORMANCE.md).
+
 The team works up to `pipeline.max_parallel` tickets at the same time per
 project (default 3). Each agent works one ticket at a time, in its own git
 worktree on a `ticket/t-<id>` branch. When a ticket passes review it is merged

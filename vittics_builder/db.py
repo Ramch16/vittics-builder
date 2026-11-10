@@ -7,6 +7,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS stage_timings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER,
+  stage TEXT NOT NULL,
+  seconds REAL NOT NULL,
+  outcome TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS verification_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL REFERENCES projects(id),
@@ -332,6 +340,9 @@ CREATE TABLE IF NOT EXISTS events (
   kind TEXT NOT NULL,
   message TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS events_recent_actor ON events(ts,actor);
+CREATE INDEX IF NOT EXISTS usage_recent_agent ON usage(created_at,agent_id);
+CREATE INDEX IF NOT EXISTS tasks_active_updated ON tasks(status,updated_at);
 """
 
 

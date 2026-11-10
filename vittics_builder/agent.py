@@ -5,6 +5,7 @@ import json
 import math
 from dataclasses import dataclass, field
 
+from .timings import timed_stage
 from .config import Settings
 from .costs import record_usage
 from .engines import ACTIONS, EngineError, EngineUnavailable, actions_to_calls, parse_block, protocol, run_cli
@@ -85,6 +86,7 @@ class AgentRuntime:
             parts.append(extra)
         return "\n\n".join(parts)
 
+    @timed_stage("agent")
     def run(self, agent: dict, instructions: str, ws: Workspace | None, **kw) -> RunResult:
         """One assignment, or one chat reply when `chat_with` is set. Logged live, and open to steering."""
         pid = kw.get("project_id")

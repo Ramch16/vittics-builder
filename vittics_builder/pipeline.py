@@ -19,6 +19,7 @@ import threading
 import time
 from pathlib import Path
 
+from .timings import timed_stage
 from .agent import AgentRuntime, RunResult
 from .costs import spent
 from .config import Settings
@@ -904,6 +905,7 @@ class Pipeline:
         self._stage(p["id"], "contract_review")
         return False
 
+    @timed_stage("acceptance_checks")
     def _host_checks(self, p: dict, ws: Workspace, record: bool = True) -> dict:
         """Run product.json's checks on this computer (not in an agent's sandbox), with the project's keys."""
         vault = getattr(self.runtime, "vault", None)
