@@ -1,6 +1,27 @@
 # Changelog
 
 ## Unreleased
+- Add role-scoped remote Streamable HTTP MCP connections, environment-bound authentication headers,
+  disabled-server enforcement and a redacted connection inventory; existing stdio servers still work.
+- Add dashboard/API/CLI department and role editing and agent reassignment, with CEO/CTO scope checks
+  and guards against restructuring running agents or moving unfinished assignments.
+- Add checksum-pinned team package import/export, optional department definitions, two example teams
+  and an MCP server starter. See `docs/EXTENDING.md`; no public marketplace or community size is implied.
+- Add independent, persistent CEO/CTO manual approval switches per project. OFF delegates routine
+  decisions and verified final sign-off; ON overrides Autopilot and requires manual approval.
+  Existing role permissions, exception handling and release verification remain enforced.
+- Fix five documented command-boundary regressions: refuse literal parent traversal and quoted
+  absolute host operands, scrub inherited credential-bearing URLs, and disable hooks/fsmonitor and
+  inherited Git configuration for company Git operations. Local command policy remains a guard,
+  not OS isolation; use Docker for untrusted shell execution.
+- Install the MCP SDK in browser integration CI so its optional test runs alongside Chromium tests.
+- Add offline `benchmark-compare` reports for matched independent trials, retaining failed/incomplete
+  costs and unknown prices. See `docs/BENCHMARKS.md` for the protocol and observation format.
+- Add opt-in adaptive ticket review based on actual changed paths and task risk hints. Plain docs
+  receive one reviewer; source/unknown changes receive code review and QA; sensitive work receives
+  all staffed reviewers and QA, including on small projects. Preserve path evidence across resumes.
+- Route using total recorded cost per reviewed success rather than cost per evaluation, so failed
+  attempts count toward cost effectiveness. No measured savings or comparative superiority claimed.
 - **CLI engines no longer inherit your secrets.** Claude Code, Codex and the other CLIs used to receive the
   whole server environment except `ANTHROPIC_API_KEY`, including the CEO and CTO dashboard tokens and other
   providers' keys. They now get the same scrubbed environment as agents' commands, plus only the login

@@ -111,8 +111,8 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     s.max_delegation_depth = int(pipeline.get("max_delegation_depth", s.max_delegation_depth))
     s.max_parallel = max(1, int(pipeline.get("max_parallel", s.max_parallel)))
     s.review_mode = str(pipeline.get("review_mode", s.review_mode))
-    if s.review_mode not in ("thorough", "standard", "light"):
-        raise ValueError("pipeline.review_mode must be thorough, standard or light.")
+    if s.review_mode not in ("thorough", "standard", "light", "adaptive"):
+        raise ValueError("pipeline.review_mode must be thorough, standard, light or adaptive.")
     staffing = raw.get("staffing", {})
     s.hire_when_waiting = max(1, int(staffing.get("hire_when_waiting", s.hire_when_waiting)))
     s.max_per_role = max(1, int(staffing.get("max_per_role", s.max_per_role)))

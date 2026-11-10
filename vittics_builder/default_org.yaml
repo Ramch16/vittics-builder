@@ -128,6 +128,7 @@ pipeline:
   max_parallel: 3                # tickets worked at the same time per project, each on its own git branch
   review_mode: standard          # who checks each ticket: thorough (every reviewer and QA role),
                                  # standard (one code reviewer and QA), light (one reviewer).
+                                 # adaptive (docs: one; source/unknown: standard; sensitive: thorough).
                                  # Release QA and the audits always run.
 
 # Guidelines every agent of the listed kinds works by, on every engine. Built in: karpathy-guidelines

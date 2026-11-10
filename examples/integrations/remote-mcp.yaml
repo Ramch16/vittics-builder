@@ -1,0 +1,24 @@
+# Merge selected entries into org.yaml; review each tool allowlist before enabling.
+tools:
+  mcp:
+    github_readonly:
+      enabled: false
+      transport: streamable_http
+      url: https://api.githubcopilot.com/mcp/readonly
+      headers_env:
+        Authorization: VITTICS_GITHUB_AUTHORIZATION
+      roles: [code_reviewer]
+      tools: [get_file_contents, search_repositories]
+    microsoft_learn:
+      enabled: false
+      transport: streamable_http
+      url: https://learn.microsoft.com/api/mcp
+      roles: [architect, tech_writer]
+      tools: [microsoft_docs_search, microsoft_docs_fetch, microsoft_code_sample_search]
+    release_notes:
+      enabled: false
+      transport: stdio
+      command: python
+      args: [/absolute/path/to/vittics-builder/examples/integrations/release_notes_server.py]
+      roles: [tech_writer]
+      tools: [release_notes]

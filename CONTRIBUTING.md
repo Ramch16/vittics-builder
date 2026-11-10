@@ -1,5 +1,8 @@
 # Contributing to Vittics Builder
 
+For integration adapters and portable team packages, start with
+[the extension guide](docs/EXTENDING.md), `examples/integrations/`, and `examples/teams/`.
+
 Thanks for helping. Vittics Builder is young, and real-world reports are the most valuable contribution.
 
 ## Report a problem

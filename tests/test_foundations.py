@@ -171,6 +171,18 @@ def test_router_excludes_uninstalled_engines_and_missing_credentials(co, monkeyp
         co.router.select(co.org.staff(kind='builder')[0],'builder',{})
 
 
+def test_routing_cost_penalty_includes_failed_attempts(co, monkeypatch):
+    co.s.raw['routing'] = {'rules': {'builder': ['retry-heavy', 'reliable']}}
+    # Equal quality/success aggregate scores isolate the cost term. Per-call
+    # spend favors retry-heavy ($1 vs $3); per-success spend favors reliable ($6 vs $10).
+    monkeypatch.setattr(co.router, 'summary', lambda *args: [
+        dict(model='retry-heavy', successes=1, evaluated=10, quality=100, latency=0, priced=1, cost=10),
+        dict(model='reliable', successes=5, evaluated=10, quality=100/3, latency=0, priced=1, cost=30),
+    ])
+    model, _ = co.router.select(co.org.staff(kind='builder')[0], 'builder', {})
+    assert model == 'reliable'
+
+
 def test_routing_runtime_failure_is_logged_and_not_scored_as_success(co):
     class Broken:
         def complete(self, **kwargs):

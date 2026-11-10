@@ -32,7 +32,7 @@ import time
 
 from .db import now
 from .observability import redact
-from .tools import SECRET_ENV
+from .tools import secret_environment
 
 ROLES = ("ceo", "cto")
 
@@ -200,7 +200,7 @@ class Production:
     def _command(self, project: dict, conf: dict, template: str, fill: dict, env: dict) -> tuple[bool, str]:
         command = self._fill(template, fill)
         allowed = {str(v) for v in conf.get("env") or []}
-        environ = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k) or k in allowed}
+        environ = {k: v for k, v in os.environ.items() if not secret_environment(k, v) or k in allowed}
         environ.update(self.co.vault.env(project["id"]))            # the project's own keys
         timeout = int(env.get("timeout_seconds") or conf.get("timeout_seconds") or 900)
         try:

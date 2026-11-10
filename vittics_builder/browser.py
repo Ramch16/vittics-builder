@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .tools import MAX_OUTPUT, SECRET_ENV, ToolError
+from .tools import MAX_OUTPUT, command_environment, ToolError
 
 
 def permitted(url, config):
@@ -62,7 +62,7 @@ def journey(ws, config, args):
             if not executable and not Path(playwright.chromium.executable_path).exists():
                 executable = shutil.which('chromium') or shutil.which('chromium-browser')
             browser = playwright.chromium.launch(headless=True, executable_path=executable, timeout=timeout * 1000,
-                                                  env={k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)})
+                                                  env=command_environment())
             try:
                 context = browser.new_context(service_workers='block', accept_downloads=False)
                 def route(request):

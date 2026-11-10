@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from .config import Settings
 from .db import DB, now
@@ -63,6 +64,9 @@ class Org:
 
     # ---- departments and roles ------------------------------------------
     def add_department(self, dept_id: str, name: str, reports_to: str, log: bool = True) -> None:
+        if (not isinstance(dept_id, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', dept_id)
+                or not isinstance(name, str) or not name.strip() or len(name) > 100):
+            raise OrgError('Department needs a safe identifier and a name (1–100 characters).')
         if reports_to not in ("ceo", "cto"):
             raise OrgError("A department reports to 'ceo' or 'cto'.")
         if self.db.one("SELECT 1 FROM departments WHERE id=?", dept_id):
@@ -87,6 +91,12 @@ class Org:
 
     def add_role(self, role_id: str, department: str, kind: str, tools: list[str], prompt: str,
                  title: str | None = None, log: bool = True) -> None:
+        if (not isinstance(role_id, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', role_id)
+                or not isinstance(department, str) or not isinstance(tools, list)
+                or any(not isinstance(t, str) for t in tools)
+                or not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 50000
+                or title is not None and (not isinstance(title, str) or not title.strip() or len(title) > 100)):
+            raise OrgError('Role needs a safe id, department, tool list, title and bounded prompt.')
         if kind not in KINDS:
             raise OrgError(f"Role kind must be one of {', '.join(KINDS)}.")
         if not self.db.one("SELECT 1 FROM departments WHERE id=?", department):
@@ -102,6 +112,62 @@ class Org:
             self.db.log("org", f"Role {role_id} added to {department}.")
 
     # ---- lookups ---------------------------------------------------------
+    def update_department(self, dept_id: str, *, name=None, reports_to=None, by='ceo') -> dict:
+        row = self.db.one('SELECT * FROM departments WHERE id=?', dept_id)
+        if not row:
+            raise OrgError(f'No department {dept_id}.')
+        name = row['name'] if name is None else name
+        reports_to = row['reports_to'] if reports_to is None else reports_to
+        if not isinstance(name, str) or not name.strip() or len(name) > 100 or reports_to not in ('ceo', 'cto'):
+            raise OrgError('Department needs a name (1–100 characters) and CEO/CTO reporting line.')
+        with self.db.lock:
+            self._require_idle_department(dept_id)
+            self.db.run('UPDATE departments SET name=?, reports_to=? WHERE id=?', name.strip(), reports_to, dept_id)
+            self.db.log('org', f'{by} updated department {dept_id}, reporting to {reports_to.upper()}.', actor=by)
+        return self.db.one('SELECT * FROM departments WHERE id=?', dept_id)
+
+    def _require_idle_department(self, department):
+        if self.db.one("SELECT 1 FROM runs x JOIN agents a ON a.id=x.agent_id JOIN roles r ON r.id=a.role "
+                       "WHERE r.department=? AND x.status='running' LIMIT 1", department):
+            raise OrgError('Department has a running agent; wait for it to finish before restructuring.')
+        if self.db.one("SELECT 1 FROM tasks t JOIN agents a ON a.id=t.assignee_id JOIN roles r ON r.id=a.role "
+                       "WHERE r.department=? AND t.status IN ('in_progress','in_review') LIMIT 1", department):
+            raise OrgError('Department has active work; pause and finish reviews before restructuring.')
+
+    def update_role(self, role_id: str, *, department=None, title=None, tools=None, prompt=None, by='ceo') -> dict:
+        row = self.role(role_id)
+        department = row['department'] if department is None else department
+        title = row['title'] if title is None else title
+        prompt = row['prompt'] if prompt is None else prompt
+        tools = json.loads(row['tools']) if tools is None else tools
+        if not isinstance(department, str) or not self.db.one('SELECT 1 FROM departments WHERE id=?', department):
+            raise OrgError('Destination department does not exist.')
+        if (not isinstance(title, str) or not title.strip() or len(title) > 100
+                or not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 50000
+                or not isinstance(tools, list) or any(not isinstance(t, str) or t not in TOOL_SPECS for t in tools)):
+            raise OrgError('Role needs a title, bounded prompt and a list of supported tools.')
+        with self.db.lock:
+            self._require_idle_department(row['department'])
+            self._require_idle_department(department)
+            self.db.run('UPDATE roles SET department=?, title=?, tools=?, prompt=? WHERE id=?',
+                        department, title.strip(), json.dumps(tools), prompt.strip(), role_id)
+            self.db.log('org', f'{by} updated role {role_id} in {department}.', actor=by)
+        return self.role(role_id)
+
+    def reassign(self, ref, role_id: str, *, by='ceo') -> dict:
+        agent = self.agent(ref)
+        self.role(role_id)
+        if agent['status'] == 'fired':
+            raise OrgError('Rehire a former agent before reassigning them.')
+        with self.db.lock:
+            if self.db.one("SELECT 1 FROM runs WHERE agent_id=? AND status='running' LIMIT 1", agent['id']):
+                raise OrgError('Agent is running; wait for it to finish before reassignment.')
+            if self.db.one("SELECT 1 FROM tasks WHERE assignee_id=? AND status NOT IN ('done','cancelled') LIMIT 1", agent['id']):
+                raise OrgError('Agent still owns unfinished tickets; finish or transfer those first.')
+            self.db.run('UPDATE agents SET role=? WHERE id=?', role_id, agent['id'])
+            self.db.log('org', f"{by} reassigned {agent['name']} from {agent['role']} to {role_id}.", actor=by)
+        return self.agent(agent['id'])
+
     def agent(self, ref: int | str) -> dict:
         """Find an agent by id, or by name/seat among current staff."""
         row = None
@@ -116,6 +182,8 @@ class Org:
         return row
 
     def role(self, role_id: str) -> dict:
+        if not isinstance(role_id, str):
+            raise OrgError('Role must be an identifier.')
         row = self.db.one("SELECT * FROM roles WHERE id=?", role_id)
         if not row:
             raise OrgError(f"No role '{role_id}'.")

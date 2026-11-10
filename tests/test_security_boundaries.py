@@ -1,8 +1,7 @@
-"""Known gaps in the command boundary, written down as tests before they are fixed.
+"""Regression tests for the command boundary security register.
 
-Each test states what SHOULD hold. Today it does not, so each is marked xfail(strict=True): the suite stays
-green, and the day a fix lands the test starts passing, strict mode turns that into a failure, and whoever
-fixed it removes the marker. IDs refer to the Week 1 audit's security register.
+These exercise literal path policy, inherited credential scrubbing and disabled Git hooks.
+Local shell policy is not an OS sandbox; use Docker for untrusted command execution.
 
 Only fake secrets are used, inside pytest's temporary folders. The shell syntax is POSIX sh, so these run on
 macOS and Linux only.
@@ -45,33 +44,28 @@ def test_literal_parent_path_is_refused(company):
     assert not leaked(ws, "cat ../../.vittics/vault/1.json", "sk_live_FAKE")
 
 
-@pytest.mark.xfail(strict=True, reason="SEC-01: deny list is a regex; a chain of `cd ..` reaches company secrets")
 def test_agent_shell_cannot_read_vault_by_changing_directory(company):
     _, ws = company
     assert not leaked(ws, "cd .. && cd .. && cat .vittics/vault/1.json", "sk_live_FAKE")
 
 
-@pytest.mark.xfail(strict=True, reason="SEC-01: an absolute path to the company folder is not refused")
 def test_agent_shell_cannot_read_saved_api_key_by_absolute_path(company):
     root, ws = company
     assert not leaked(ws, f"cat '{root / '.vittics' / 'credentials.json'}'", "sk-ant-FAKE")
 
 
-@pytest.mark.xfail(strict=True, reason="SEC-01: quoting a system path slips past the /etc/ pattern")
 def test_quoted_system_path_is_refused(company):
     _, ws = company
     with pytest.raises(ToolError):
         ws.run_command("cat '/etc/hosts'")
 
 
-@pytest.mark.xfail(strict=True, reason="SEC-03: env scrubbing is by variable name; DATABASE_URL carries a password")
 def test_credentials_in_connection_urls_do_not_reach_commands(company, monkeypatch):
     _, ws = company
     monkeypatch.setenv("DATABASE_URL", "postgres://app:FAKEPASS123@db.internal/app")
     assert not leaked(ws, "env", "FAKEPASS123")
 
 
-@pytest.mark.xfail(strict=True, reason="SEC-05: a git hook planted by an agent command runs on the company's commit")
 def test_agent_planted_git_hook_does_not_run_on_company_commit(company, tmp_path):
     _, ws = company
     proof = tmp_path / "hook-ran"

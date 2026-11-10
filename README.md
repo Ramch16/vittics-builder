@@ -106,6 +106,13 @@ orchestration using a scripted library; it does not validate AI coding quality.
 
 ## Install
 
+For remote MCP connections, dashboard organization editing, portable team bundles
+and contributor examples, see [Extending Vittics Builder](docs/EXTENDING.md).
+
+For matched quality/cost trials and opt-in adaptive ticket reviews, see
+[delivery benchmarks](docs/BENCHMARKS.md). Reports preserve failed-run costs and
+unknown prices; no comparison with another orchestrator has been measured yet.
+
 Python 3.11+ and git.
 
 ```bash
@@ -181,6 +188,16 @@ agents run the full flow offline. `VITTICS_MOCK_BAD_AGENTS=Hari,Sandy` makes
 those agents fail reviews so you can watch escalation and replacement.
 
 ## Two people, one dashboard
+
+Each project's **Idea to production → Manual approvals** card has separate CEO
+and CTO ON/OFF switches. ON requires that person's manual approval. OFF handles
+routine approvals automatically, including final sign-off after verification.
+Failed checks, escalations, budget increases, hiring and deployment approvals
+still wait for a person. The switches persist per project and override legacy
+Autopilot levels for the selected role. Existing settings remain in effect until
+a switch is changed. In a shared dashboard each account changes only its own
+switch; in the desktop app one person can change both. Turning ON takes effect
+for subsequent decisions; already approved work is not undone.
 
 ```bash
 export VITTICS_CEO_TOKEN=... VITTICS_CTO_TOKEN=...

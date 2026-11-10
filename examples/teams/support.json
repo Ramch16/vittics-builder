@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "sha256": "626b25925a665a9846c00b7c8dfa5801cfa306f72dc47c0905a50a0ad6597db0",
+  "manifest": {
+    "name": "examples/support",
+    "version": "1.0.0",
+    "description": "Support writer starter team",
+    "departments": [
+      {
+        "id": "customer_ops",
+        "name": "Customer Ops",
+        "reports_to": "ceo"
+      }
+    ],
+    "roles": [
+      {
+        "id": "support_analyst",
+        "department": "customer_ops",
+        "kind": "builder",
+        "title": "Support writer",
+        "tools": [
+          "read_file",
+          "list_files",
+          "write_file"
+        ],
+        "prompt": "Write product FAQs and troubleshooting guides based on verified behavior."
+      }
+    ]
+  },
+  "assets": {
+    "support.md": "# Support writer\n\nWrite product FAQs and troubleshooting guides based on verified behavior. Cite source evidence and escalate uncertainty to a person.\n"
+  }
+}
