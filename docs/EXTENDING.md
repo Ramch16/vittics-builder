@@ -33,7 +33,9 @@ headers_env:
 
 Set that environment variable to the complete header value, such as `Bearer <PAT>`;
 do not put actual credentials in org.yaml, examples or packages. The service must
-inherit the variable. Requests use HTTPS, except HTTP on literal loopback hosts;
+inherit the variable. Header bindings require a secret-labelled variable (for
+example AUTH, TOKEN or KEY in its name), or a Bearer/Basic value, so unrelated
+child processes filter it out of their inherited environment. Requests use HTTPS, except HTTP on literal loopback hosts;
 URL credentials, query strings and fragments are refused. Redirects are not
 followed, and proxy/credential environment variables are not inherited by the
 remote HTTP client. Public service availability, server tool names and account

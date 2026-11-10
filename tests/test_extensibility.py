@@ -214,3 +214,13 @@ def test_remote_redirect_does_not_forward_credentials(co,monkeypatch):
         assert 'never-redirect' not in str(error.value)
     finally:
         server.shutdown();server.server_close();thread.join(timeout=5)
+
+
+def test_header_binding_cannot_bypass_child_environment_scrubbing(co,monkeypatch):
+    pytest.importorskip('mcp')
+    monkeypatch.setenv('SERVICE_VALUE','unlabelled-raw-credential')
+    async def enter():
+        async with Integrations(co.s)._transport({'transport':'streamable_http','url':'http://127.0.0.1:9/mcp',
+                    'headers_env':{'X-Api-Key':'SERVICE_VALUE'}},Workspace(co.s.root/'ws')):
+            pytest.fail('Unsafe header binding entered')
+    with pytest.raises(ToolError,match='secret label'):asyncio.run(enter())

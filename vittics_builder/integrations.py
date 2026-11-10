@@ -10,7 +10,7 @@ from datetime import timedelta
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from .tools import INTEGRATION_SPECS, MAX_OUTPUT, command_environment, ToolError
+from .tools import INTEGRATION_SPECS, MAX_OUTPUT, command_environment, secret_environment, ToolError
 
 
 class Integrations:
@@ -97,6 +97,8 @@ class Integrations:
                 value = os.environ.get(variable)
                 if not value or '\r' in value or '\n' in value:
                     raise ToolError('A configured MCP credential is missing or invalid.')
+                if not secret_environment(variable, value):
+                    raise ToolError('Header-bound variables must use a secret label such as AUTH, TOKEN or KEY, or a Bearer/Basic value.')
                 headers[header] = value
             async def refuse_redirect(response):
                 # The SDK implements its own same-origin redirect handling;
