@@ -38,7 +38,7 @@ def test_secrets_are_not_passed_to_commands(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('command', [
-    'cd ..; pwd', "cat '/etc/hosts'", 'cat -- /etc/hosts',
+    'cd ..; pwd', 'cd ..&&pwd', 'cd "..";pwd', "cat '/etc/hosts'", 'cat -- /etc/hosts',
     'cat --file=/etc/hosts', 'cat ../outside.txt',
 ])
 def test_unquoted_operands_cannot_escape_literal_path_policy(tmp_path, command):

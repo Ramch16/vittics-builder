@@ -281,7 +281,10 @@ class Workspace:
         # on regexes over raw command text. This is still a policy guard, not an
         # OS sandbox: generated/interpreted paths require Docker confinement.
         try:
-            tokens = shlex.split(command, posix=os.name != 'nt')
+            lexer = shlex.shlex(command, posix=os.name != 'nt', punctuation_chars=';&|<>()')
+            lexer.whitespace_split = True
+            lexer.commenters = ''
+            tokens = list(lexer)
         except ValueError as exc:
             raise ToolError('Command has invalid shell quoting.') from exc
         for token in tokens:
