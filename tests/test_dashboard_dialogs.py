@@ -105,6 +105,7 @@ def test_buttons_work_without_native_dialogs(co, monkeypatch):
                 page.locator('#org-form button[type="submit"]').click()
                 expect(page.locator('#org-dlg')).not_to_be_visible()
                 research = page.locator('#people .card').filter(has_text='Research office')
+                expect(research).to_contain_text('Research builder')
                 research.locator('summary').click()
                 research.locator('[data-org-action="role"]').click()
                 page.locator('#org-name').fill('Research analyst')

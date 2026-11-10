@@ -1018,6 +1018,14 @@ function renderProject() {
     </div>`);
 }
 
+const openRoleDepartments = new Set();
+document.addEventListener('toggle', e => {
+  const panel=e.target;
+  if (panel.matches?.('details[data-org-roles]')) {
+    if (panel.open) openRoleDepartments.add(panel.dataset.orgRoles);
+    else openRoleDepartments.delete(panel.dataset.orgRoles);
+  }
+}, true);
 function renderPeople(me) {
   $('org-add-dept').hidden = me !== 'ceo';
   const showFired = $("show-fired").checked, staff = state.departments.flatMap(d => d.agents.filter(a => a.status !== "fired"));
@@ -1026,7 +1034,7 @@ function renderPeople(me) {
     const canManage = me === "ceo" || d.reports_to === "cto";
     const people = d.agents.filter(a => showFired || a.status !== "fired");
     return `<div class="card"><div class="card-head"><h2>${esc(d.name)}</h2><span class="muted">Reports to ${esc(state.humans[d.reports_to])}</span>${canManage ? `<button class="quiet" data-org-action="department" data-org-id="${esc(d.id)}">Edit department</button>` : ''}</div>
-      ${canManage ? `<details><summary>Roles</summary>${d.roles.map(r => `<p>${esc(r.title)} <button class="quiet" data-org-action="role" data-org-id="${esc(r.id)}">Edit role</button></p>`).join('')}</details>` : ''}
+      ${canManage ? `<details data-org-roles="${esc(d.id)}" ${openRoleDepartments.has(d.id) ? 'open' : ''}><summary>Roles</summary>${d.roles.map(r => `<p>${esc(r.title)} <button class="quiet" data-org-action="role" data-org-id="${esc(r.id)}">Edit role</button></p>`).join('')}</details>` : ''}
       ${people.map(a => {
         const s = a.score, cls = s == null ? "" : s < 45 ? "low" : s < 65 ? "mid" : "";
         const chat = (state.chats || []).find(c => c.agent_id === a.id);
@@ -1160,8 +1168,10 @@ $('org-form').onsubmit = async e => {
     data = {title:value('name'),department:value('department'),prompt:value('prompt'),tools:value('tools').split(',').map(t=>t.trim()).filter(Boolean)};
     if (!id) Object.assign(data,{id:value('id'),kind:value('kind')});
   } else {path=`/api/agents/${id}/reassign`;data={role:value('role')};method='POST';}
-  try {await api(path,data,method);$('org-dlg').close();await refresh(true);}
+  const save=$('org-form').querySelector('button[type="submit"]');save.disabled=true;
+  try {await api(path,data,method);await refresh(true);$('org-dlg').close();}
   catch(err) {$('org-error').textContent=err.message;}
+  finally {save.disabled=false;}
 };
 document.addEventListener('click', e => {
   const b=e.target.closest('[data-org-action]');
