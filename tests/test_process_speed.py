@@ -37,6 +37,7 @@ def through_design(co, size):
 def test_small_project_runs_the_light_process(tmp_path):
     provider = Recording()
     co = Company(tmp_path, provider=provider, create=True)
+    co.s.review_mode = "standard"  # Explicit legacy policy: small projects use one reviewer.
     p, after = through_design(co, "small")
     assert after["stage"] == "release_approval"
     prd = [text for meta, text in provider.prompts if "docs/PRD.md" in text and "Write the requirements" in text]

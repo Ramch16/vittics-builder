@@ -15,15 +15,21 @@ def presence(db: DB) -> list[dict]:
     minutes), or idle, with what they are doing."""
     now = datetime.now(timezone.utc)
     recent = _iso(now - timedelta(minutes=4))
+    # Batch lookups: four queries regardless of how many agents are staffed.
+    tickets = {}
+    for row in db.all("SELECT id,title,status,assignee_id FROM tasks WHERE status IN ('in_progress','in_review') ORDER BY updated_at DESC,id DESC"):
+        tickets.setdefault(row['assignee_id'], row)
+    events = {}
+    for row in db.all("SELECT actor,ts,message FROM events WHERE id IN (SELECT MAX(id) FROM events WHERE ts>=? GROUP BY actor)", recent):
+        events.setdefault(row['actor'], row)
+    active = {row['agent_id'] for row in db.all("SELECT DISTINCT agent_id FROM usage WHERE created_at>=?", recent)}
     out = []
     for a in db.all("SELECT a.id, a.name, a.role, a.status, a.model, r.title, d.name AS department FROM agents a "
                     "JOIN roles r ON r.id=a.role JOIN departments d ON d.id=r.department WHERE a.status!='fired' "
                     "ORDER BY d.name, a.id"):
-        ticket = db.one("SELECT id, title, status FROM tasks WHERE assignee_id=? AND status IN ('in_progress','in_review') "
-                        "ORDER BY updated_at DESC LIMIT 1", a["id"])
-        event = db.one("SELECT ts, message FROM events WHERE actor=? AND ts>=? ORDER BY id DESC LIMIT 1", a["name"], recent)
-        call = db.one("SELECT created_at FROM usage WHERE agent_id=? AND created_at>=? ORDER BY id DESC LIMIT 1",
-                      a["id"], recent)
+        ticket = tickets.get(a['id'])
+        event = events.get(a['name'])
+        call = a['id'] in active
         if ticket:
             state = "working"
             doing = f"{'Reviewing' if ticket['status'] == 'in_review' else 'Working on'} T-{ticket['id']} {ticket['title']}"

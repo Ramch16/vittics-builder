@@ -239,11 +239,12 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
     @app.get('/api/operations')
     def operations(role: str = Depends(auth)):
         from .observability import sanitize
+        from .timings import summary as timing_summary
         return sanitize({'service':co.workers.service(),'workers':co.workers.list(),'worker_runs':co.db.all('SELECT * FROM worker_runs ORDER BY id DESC LIMIT 100'),
                          'observations':co.observability.list(),'learning':co.learning.summary(),
                          'arena':co.db.all('SELECT id,project_id,status,winner,created_at FROM arena_runs ORDER BY id DESC LIMIT 50'),
                          'assessments':co.db.all('SELECT id,project_id,kind,status,revision,created_at FROM company_assessments ORDER BY id DESC LIMIT 50'),
-                         'marketplace':co.marketplace.list(), 'integrations':co.runtime.integrations.inventory()})
+                         'performance':timing_summary(co.db), 'marketplace':co.marketplace.list(), 'integrations':co.runtime.integrations.inventory()})
 
     @app.post('/api/workers')
     def add_worker(data: WorkerRequest,role: str = Depends(auth)):
@@ -322,6 +323,11 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         try:envelope=json.loads(body)
         except ValueError:raise HTTPException(400,'Malformed federation envelope.')
         return guard(lambda:co.federation.receive(envelope))
+
+    @app.get("/api/performance")
+    def performance(role: str = Depends(auth)) -> dict:
+        from .timings import summary
+        return summary(co.db)
 
     @app.get("/api/state")
     def state(role: str = Depends(auth)) -> dict:

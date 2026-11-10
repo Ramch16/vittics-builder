@@ -63,3 +63,10 @@ def test_sensitive_paths_survive_interrupted_review(co, monkeypatch):
     assert co.pipeline._run_task(p, task, ws)
     assert len(builds) == 1
     assert 'security_engineer' in reviewers
+
+
+def test_new_company_defaults_to_adaptive_review(co):
+    assert co.s.review_mode == 'adaptive'
+    p = co.pipeline.create_project('Default policy', 'A library', size='small')
+    assert len(co.pipeline._checkers(p['id'], paths=['docs/guide.md'])) == 1
+    assert len(co.pipeline._checkers(p['id'], paths=['src/app.py'])) == 2

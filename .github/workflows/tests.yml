@@ -49,5 +49,10 @@ jobs:
         run: |
           git config --global user.email "ci@vittics.local"
           git config --global user.name "Vittics Builder CI"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test dashboard polling under slow responses
+        run: node --test tests/dashboard_polling.cjs
       - name: Test full suite including browser and MCP integrations
         run: python -m pytest -q -ra -p no:cacheprovider
