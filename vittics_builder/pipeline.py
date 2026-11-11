@@ -318,6 +318,32 @@ class Pipeline:
         self.db.run("UPDATE projects SET paused_stage=? WHERE id=?", self.project(pid)["stage"], pid)
         self._stage(pid, "paused")
 
+    def wait_for_verification(self, pid: int, by: str, reason: str) -> dict:
+        reason = reason.strip()
+        if not reason:
+            raise PipelineError("Describe the missing verification and the human check needed.")
+        lock = self._locks.setdefault(pid, threading.Lock())
+        if not lock.acquire(blocking=False):
+            raise PipelineError("Pause the project and wait for current work to finish before holding verification.")
+        try:
+            p = self.project(pid)
+            if p["stage"] not in ("build", "release_blocked", "paused"):
+                raise PipelineError("Verification can be held only during build or blocked release review.")
+            if p["stage"] == "paused" and p["paused_stage"] not in ("build", "release_blocked"):
+                raise PipelineError("Resolve the original pause before holding verification.")
+            with self.db.lock:
+                if self.db.one("SELECT id FROM approvals WHERE project_id=? AND status='pending' AND kind!='release_blocked'", pid):
+                    raise PipelineError("Resolve other pending decisions before holding verification.")
+                self.db.run("UPDATE approvals SET status='rejected',feedback=?,decided_by=?,decided_at=? "
+                            "WHERE project_id=? AND kind='release_blocked' AND status='pending'",
+                            reason, by, now(), pid)
+                self._release_failure(p, ["Human verification requested by " + by + ": " + reason], verification_only=True)
+                self.db.run("UPDATE projects SET paused_stage='' WHERE id=?", pid)
+                self._pause_requested.discard(pid)
+            return self.project(pid)
+        finally:
+            lock.release()
+
     def resume(self, pid: int, by: str) -> dict:
         """Undo a pause. A project paused because its budget ran out needs a larger budget instead."""
         self._pause_requested.discard(pid)
@@ -768,6 +794,7 @@ class Pipeline:
                 integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
                                  "install it, run the full test suite and try the main flows. Write what you ran and "
                                  "what you found to docs/QA_REPORT.md, including anything that does not work. "
+                                 "If the sole blocker is missing verification access/evidence, set blocker_type to verification and list exact human-assisted steps in notes; do not propose code repairs. "
                                  "Finish by calling submit_review; request_changes if any required flow fails OR any required acceptance check has not been executed. Passing automated commands do not satisfy manual accessibility, visual or other unexecuted requirements. Supply the acceptance array in submit_review with a criterion-by-criterion evidence checklist; do not approve incomplete verification.\n\n"
                                  + evidence(checked),
                                  ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket})
@@ -775,11 +802,17 @@ class Pipeline:
                 if not integration.completed or not integration.review or integration.review["verdict"] != "approve" or not self._read(ws, "docs/QA_REPORT.md"):
                     release_findings.append("Integration QA: " + ((integration.review or {}).get("notes") or "No completed approval verdict."))
                 self._stage_status(p["id"], "stage-release-qa", "done", qa["name"], self._verdict(integration.review)
-                                   + ("" if not release_findings else " Repair work goes back to Engineering."), kind="comment")
+                                   + ("" if not release_findings else " Release remains blocked pending evidence or demonstrated defect repair."), kind="comment")
             else:
                 release_findings.append("No QA agent is staffed to validate the full product.")
             if release_findings:
-                self._release_failure(p, release_findings)
+                verification_only = bool(qa and integration.completed and integration.review
+                    and integration.review.get("blocker_type") == "verification"
+                    and integration.review.get("verdict") == "request_changes"
+                    and integration.review.get("acceptance")
+                    and any(c.get("status") == "unverified" for c in integration.review["acceptance"])
+                    and not any(c.get("status") == "failed" for c in integration.review["acceptance"]))
+                self._release_failure(p, release_findings, verification_only=verification_only)
                 return
             open_findings = self._audit(p, ws, checked, checked_head)
             if open_findings is None:
@@ -936,8 +969,15 @@ class Pipeline:
         return [*report["errors"], *(f"Check {c['id']} failed when run on this computer: {c['output']}"
                                      for c in report["checks"] if not c["passed"])]
 
-    def _release_failure(self, p: dict, findings: list[str]) -> None:
+    def _release_failure(self, p: dict, findings: list[str], *, verification_only: bool = False) -> None:
         pid = p["id"]
+        if verification_only:
+            self._approval(pid, "release_blocked", "cto", f"Human verification required for {p['name']}",
+                           "\n".join(findings) + "\n\nRelease remains blocked. Complete the missing checks on the current candidate, "
+                           "then retry verification. Do not rebuild unless an application defect is demonstrated.",
+                           {"verification_only": True})
+            self._stage(pid, "release_blocked")
+            return
         if self.runtime.learning:
             self.runtime.learning.settle_project(pid, False, "Vittics Builder", "the release checks then failed")
         rounds = self.db.one("SELECT COUNT(*) AS n FROM tasks WHERE project_id=? AND key LIKE 'verify-%'", pid)["n"]
@@ -1403,6 +1443,8 @@ class Pipeline:
             board_ws=self.workspace(self.project(pid))
             if not assessment or board_ws.changed_files()!='(no uncommitted changes)' or board_ws.git('rev-parse','HEAD')!=assessment['revision']:
                 raise PipelineError('Board assessment is stale; rerun it on the current product revision.')
+        if a["kind"] == "release_blocked" and choice not in ("", "wait", "retry", "repair"):
+            raise PipelineError("Choose wait, retry verification, or repair for a blocked release.")
         if ok and a["kind"] == "release_blocked":
             raise PipelineError("Failed release checks cannot be approved. Reject with repair guidance to retry.")
         if ok and a["kind"] in ("release", "signoff", "task_review"):
@@ -1516,9 +1558,15 @@ class Pipeline:
                                f"version. Do not edit {CONTRACT} again unless the CTO asks.\n{feedback}", reporter=who)
             self._stage(pid, "build")
         elif kind == "release_blocked":
-            self.db.run("UPDATE tasks SET key='retried-' || key || '-' || id WHERE project_id=? AND key LIKE 'verify-%'", pid)
-            self._fix_task(pid, "Repair blocked release", feedback, reporter=who)
-            self._stage(pid, "build")
+            action = choice or ("wait" if payload.get("verification_only") else "repair")
+            if action == "wait":
+                self._release_failure(self.project(pid), [a["summary"], feedback], verification_only=True)
+            elif action == "retry":
+                self._stage(pid, "build")  # rerun verification; do not create another implementation ticket
+            else:
+                self.db.run("UPDATE tasks SET key='retried-' || key || '-' || id WHERE project_id=? AND key LIKE 'verify-%'", pid)
+                self._fix_task(pid, "Repair blocked release", feedback, reporter=who)
+                self._stage(pid, "build")
         elif kind == "task_review":
             if self.runtime.learning:
                 self.runtime.learning.settle_project(pid, ok, who, f"{who} {'accepted' if ok else 'sent back'} the changes")

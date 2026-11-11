@@ -486,7 +486,16 @@ class AgentRuntime:
                     raise ToolError("Acceptance entries need criterion, status and observed evidence or the missing prerequisite.")
                 if args["verdict"] == "approve" and any(item["status"] != "passed" for item in acceptance):
                     raise ToolError("Cannot approve with failed or unverified acceptance criteria. Request changes and identify the gaps.")
+            blocker = args.get("blocker_type")
+            if blocker is not None and blocker not in ("defect", "verification"):
+                raise ToolError("Review blocker_type must be defect or verification.")
+            if blocker == "verification" and (args["verdict"] != "request_changes" or not acceptance
+                    or not any(item["status"] == "unverified" for item in acceptance)
+                    or any(item["status"] == "failed" for item in acceptance)):
+                raise ToolError("Verification-only blockers require request_changes, unverified evidence, and no failed criteria.")
             result.review = {"score": score, "verdict": args["verdict"], "notes": args.get("notes", "")}
+            if blocker is not None:
+                result.review["blocker_type"] = blocker
             if acceptance is not None:
                 result.review["acceptance"] = acceptance
             return "Review received."

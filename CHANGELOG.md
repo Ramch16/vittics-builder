@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Hold verification-only release blockers for human evidence instead of opening implementation repairs.
+  Add CTO-owned verification holds and separate wait, retry-verification and explicit code-repair actions;
+  failed checks and unexecuted requirements still prevent release approval.
 - Retry a rejected or missing CLI review action once with its validation error and explicit scope, using
   read-only permissions and no repeated ticket actions. Preserve acceptance gates and expose the
   actual error when review remains incomplete.

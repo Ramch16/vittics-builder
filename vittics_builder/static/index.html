@@ -846,8 +846,13 @@ function decisionCard(a, me) {
       <button class="primary" data-decide="approved" data-choice="commercial" data-id="${a.id}">Build to sell</button>
       <button data-decide="rejected" data-choice="park" data-id="${a.id}">Park</button>
       <button data-decide="rejected" data-choice="drop" data-id="${a.id}">Drop</button>` : `
-      ${a.kind === "release_blocked" ? `<span class="muted">Checks must pass before release. Send repair guidance to retry.</span>` : `<button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>`}
-      <button data-decide="rejected" data-id="${a.id}">${a.kind === "budget" ? "Stop work" : a.kind === "hire" ? "Decline" : "Send back"}</button>`}
+      ${a.kind === "release_blocked" ? `
+        <span class="muted">Release stays blocked until verification passes.</span>
+        <button data-decide="rejected" data-choice="wait" data-id="${a.id}">Wait for human verification</button>
+        <button data-decide="rejected" data-choice="retry" data-id="${a.id}">Retry verification</button>
+        <button data-decide="rejected" data-choice="repair" data-id="${a.id}">Request code repair</button>` : `
+        <button class="primary" data-decide="approved" data-id="${a.id}">Approve</button>
+        <button data-decide="rejected" data-id="${a.id}">${a.kind === "budget" ? "Stop work" : a.kind === "hire" ? "Decline" : "Send back"}</button>`}`}
     </div>` : ""}
   </div>`;
 }
@@ -920,7 +925,7 @@ function renderOffice() {
 function nextStep(p) {
   if (p.kind !== "task") return (state.next_steps || {})[p.stage] || "";
   return ({ build: "The team builds and reviews the ticket.", release_approval: "Lucky reviews the changes.",
-    release_blocked: "Lucky sends repair guidance.", paused: "Niki sets a new budget to resume.",
+    release_blocked: "The CTO chooses human verification, rechecking, or code repair.", paused: "Resume when ready or resolve the pause reason.",
     done: "Done. Download the patch or pull the branch." })[p.stage] || "";
 }
 
@@ -975,6 +980,7 @@ function renderProject() {
         ${p.stage === "parked" && me === "ceo" ? `<button data-revisit="${p.id}">Revisit this idea</button>` : ""}
         ${["done", "live", "dropped", "parked"].includes(p.stage) ? "" : `<button class="quiet" data-run="${p.id}">${p.stage === "paused" ? "Resume" : "Resume work"}</button>`}
         ${["done", "live", "dropped", "parked", "paused"].includes(p.stage) ? "" : `<button class="quiet" data-pause="${p.id}" title="Stop this project; work in progress finishes first">Pause</button>`}
+        ${me === "cto" && ["build", "release_blocked", "paused"].includes(p.stage) ? `<button data-verification-wait="${p.id}">Wait for verification</button>` : ""}
       </div></div>
     <div class="stepper">${s.list.map((st, i) => `<div class="step ${s.done || i < s.at ? "past" : i === s.at ? "now" : ""}"><i></i>${esc(st.label)}</div>`).join("")}</div>
     <div class="cols">
@@ -1466,13 +1472,18 @@ $("f-text").oninput = renderTickets;
 document.addEventListener("input", e => { if (e.target.dataset.draft) drafts[e.target.dataset.draft] = e.target.value; });
 document.addEventListener("click", e => {
   const d = e.target.dataset;
-  if (d.decide) act(async () => { await api(`/api/approvals/${d.id}`, { decision: d.decide, feedback: drafts[d.id] || "", choice: d.choice || "" }); delete drafts[d.id]; });
+  if (d.decide) act(async () => { await api(`/api/approvals/${d.id}`, { decision: d.decide, feedback: drafts[d.id] || (d.choice === 'wait' ? 'Wait for human verification; no code repair requested.' : d.choice === 'retry' ? 'Retry verification against the current candidate.' : ""), choice: d.choice || "" }); delete drafts[d.id]; });
   else if (d.revisit) act(() => api(`/api/projects/${d.revisit}/revisit`, {}));
   else if (d.boardReview) act(async()=>{await api(`/api/projects/${d.boardReview}/board`,{});location.hash='#/operations';await loadOperations();});
   else if (d.securityScan) act(async()=>{const report=await api(`/api/projects/${d.securityScan}/security-scan`,{});$("ops-detail-body").textContent=JSON.stringify(report,null,2);$("ops-detail").showModal();});
   else if (d.work) act(() => api(`/api/projects/${d.work}/work?cycles=5&seconds=300`, {}));
   else if (d.run) act(async () => notice((await api(`/api/projects/${d.run}/run`, {})).message));
   else if (d.pause) act(async () => notice((await api(`/api/projects/${d.pause}/pause`, {})).message));
+  else if (d.verificationWait) act(async () => {
+    const reason = await askAction("Pause active work first. This holds release for human verification without creating a code-repair ticket.", {title: "Wait for human verification", label: "Missing checks and exact human steps"});
+    if (!reason) return;
+    await api(`/api/projects/${d.verificationWait}/verification-wait`, {body: reason});
+  });
   else if (d.rehire) act(() => api(`/api/agents/${d.rehire}/rehire`, {}));
   else if (d.fire) {
     act(async () => {

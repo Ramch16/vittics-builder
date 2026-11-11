@@ -155,6 +155,8 @@ TOOL_SPECS: dict[str, dict] = {
             {"score": {"type": "integer", "minimum": 0, "maximum": 100},
              "verdict": {"type": "string", "enum": ["approve", "request_changes"]},
              "notes": {"type": "string", "description": "Concrete findings the author can act on"},
+             "blocker_type": {"type": "string", "enum": ["defect", "verification"],
+                              "description": "verification only when missing evidence is the sole blocker, with unverified acceptance entries and no failed entries; never a waiver"},
              "acceptance": {"type": "array", "description": "Required for release integration: one entry for every PRD acceptance criterion, including manual checks.",
                             "items": {"type": "object", "properties": {
                                 "criterion": {"type": "string"},
