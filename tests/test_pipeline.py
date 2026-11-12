@@ -73,6 +73,8 @@ def test_failing_work_is_reworked_escalated_and_the_agent_replaced(make_company)
     assert successor["generation"] == 2 and "acceptance criteria" in successor["lessons"]
 
     # CTO sends the task back; the seat's new holder picks it up and passes.
+    # This recovery scenario explicitly authorizes more than the default repair allowance.
+    co.s.raw.setdefault('pipeline', {})['max_project_repairs'] = 6
     decide_next(co, "cto", "rejected", "Start over and follow the design.")
     task = next(t for t in co.pipeline.overview()[0]["tasks"] if t["key"] == "core")
     assert task["status"] == "done" and task["assignee_id"] == successor["id"]

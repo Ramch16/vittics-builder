@@ -100,6 +100,10 @@ class EngineUnavailable(EngineError):
     """The engine refused to work (usage limit, rate limit, not signed in). Nobody failed: pause and resume later."""
 
 
+class ProjectRunLimit(EngineUnavailable):
+    """A durable project allowance requires explicit review, not an engine retry."""
+
+
 UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hit your .{0,30}limit|quota|too many requests|"
                          r"not logged in|please run /login|overloaded|selected model is at capacity|temporarily unavailable", re.I)
 

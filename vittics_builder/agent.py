@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from .timings import timed_stage
 from .config import Settings
 from .costs import record_usage
-from .engines import ACTIONS, EngineError, EngineUnavailable, actions_to_calls, parse_block, protocol, run_cli
+from .engines import ACTIONS, EngineError, EngineUnavailable, ProjectRunLimit, actions_to_calls, parse_block, protocol, run_cli
 from .failover import limit_key
 from .memory import MEMORY_TOOL_SPECS
 from .runs import describe_call
@@ -126,10 +126,12 @@ class AgentRuntime:
         while True:
             agent = {**agent, "model": model}
             route_id, route_started = None, None
-            if self.router:
-                agent, route_id, route_started = self.router.start(agent, pid, meta, kind, model, reason)
+            project = self.db.one('SELECT size FROM projects WHERE id=?', pid) if pid else None
+            run_limit = (self.s.raw.get('pipeline') or {}).get(
+                'max_project_runs', 40 if project and project['size'] == 'small' else 80)
             run_id = self.runs.start(agent, pid, meta.get("ticket_id"),
-                                     meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions)
+                                     meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions,
+                                     limit=run_limit if pid else None)
             if not tried:
                 for s in waiting:
                     self.runs.event(run_id, "steer", f"{s['author']}: {s['body']}")
@@ -137,13 +139,16 @@ class AgentRuntime:
                 self.runs.event(run_id, "text", f"(Continuing on {model}: {reason}.)")
             kw["meta"] = {**meta, "run_id": run_id}
             try:
+                if self.router:
+                    agent, route_id, route_started = self.router.start(agent, pid, meta, kind, model, reason)
                 res = self._run(agent, instructions, ws, **kw)
-            except Exception as exc:
-                self.runs.finish(run_id, "failed", f"{type(exc).__name__}: {exc}")
+            except BaseException as exc:
+                self.runs.finish(run_id, "failed" if isinstance(exc, Exception) else "stopped",
+                                 f"{type(exc).__name__}: {exc}")
                 limited = isinstance(exc, EngineUnavailable)
                 if route_id:
                     self.router.finish(route_id, route_started, 'unavailable' if limited else 'failed', run_id)
-                if not (limited and failover):
+                if isinstance(exc, ProjectRunLimit) or not (limited and failover):
                     raise
                 until = failover.rest(model, str(exc))
                 tried.append(model)

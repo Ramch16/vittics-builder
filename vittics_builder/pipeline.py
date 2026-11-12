@@ -288,6 +288,10 @@ class Pipeline:
         except EngineUnavailable as exc:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress','in_review') "
                         "AND origin!='stage'", pid)
+            from .engines import ProjectRunLimit
+            if isinstance(exc, ProjectRunLimit):
+                self.db.log('paused', str(exc), pid)
+                raise PipelineError(str(exc)) from exc
             self.db.log("paused", f"Work paused: {exc}. Nothing was counted against the team. "
                         f"Resume once it is back (Resume work, or `vittics-builder run {pid}`).", pid)
             raise PipelineError(f"Work paused: {exc}. Nothing was counted against the team; resume once it is back "
@@ -1164,7 +1168,7 @@ class Pipeline:
         remain charged: they may already have consumed tokens or changed files.
         """
         limit = (self.s.raw.get('pipeline') or {}).get('max_project_repairs',
-                                                      1 if self.small(pid) else None)
+                                                      1 if self.small(pid) else 3)
         if limit is not None and (type(limit) is not int or limit < 0):
             raise PipelineError('pipeline.max_project_repairs must be a nonnegative integer or null.')
         with self.db.lock:
