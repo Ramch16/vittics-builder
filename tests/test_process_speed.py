@@ -1,5 +1,6 @@
 """0.23: a lighter process for small projects, no release restarts, pause/resume and other fixes from the pilot."""
 import json
+import time
 
 from fastapi.testclient import TestClient
 
@@ -116,7 +117,18 @@ def test_pause_and_resume(tmp_path):
     assert co.pipeline.advance(p["id"])["stage"] == "paused"               # nothing runs while paused
     resumed = client.post(f"/api/projects/{p['id']}/run", headers=h).json()
     assert resumed["stage"] == "prd_approval" and resumed["message"].startswith("Waiting for the CEO")
-    assert client.post(f"/api/projects/{p['id']}/run", headers=h).json()["message"].startswith("Waiting")
+    # Resume starts a background worker. It may still hold the project lock
+    # after the first HTTP response; require eventual idempotent waiting rather
+    # than assuming the worker finishes before the next request is scheduled.
+    deadline = time.monotonic() + 5
+    while True:
+        repeated = client.post(f"/api/projects/{p['id']}/run", headers=h).json()
+        assert repeated['stage'] == 'prd_approval'
+        if repeated['message'].startswith('Waiting'):
+            break
+        assert repeated['message'] == 'Already working on it.'
+        assert time.monotonic() < deadline, 'Resume worker did not return to the approval gate'
+        time.sleep(0.01)
 
 
 def test_a_pause_asked_for_mid_run_stops_at_the_next_safe_point(tmp_path):

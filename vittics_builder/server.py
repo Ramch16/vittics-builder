@@ -551,6 +551,12 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
                 raise HTTPException(400, out[:2000])
         return co.previews.current(pid) or {}
 
+    @app.post("/api/projects/{pid}/verification-wait")
+    def verification_wait(pid: int, data: Steer, role: str = Depends(auth)) -> dict:
+        if role != "cto":
+            raise HTTPException(403, "The CTO controls release verification.")
+        return guard(lambda: co.pipeline.wait_for_verification(pid, co.s.human(role), data.body))
+
     @app.post("/api/projects/{pid}/run")
     def run_project(pid: int, role: str = Depends(auth)) -> dict:
         """Resume work, and say what happened: the button used to give no sign either way."""

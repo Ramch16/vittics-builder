@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from .timings import timed_stage
 from .config import Settings
 from .costs import record_usage
-from .engines import ACTIONS, EngineError, EngineUnavailable, actions_to_calls, parse_block, protocol, run_cli
+from .engines import ACTIONS, EngineError, EngineUnavailable, ProjectRunLimit, actions_to_calls, parse_block, protocol, run_cli
 from .failover import limit_key
 from .memory import MEMORY_TOOL_SPECS
 from .runs import describe_call
@@ -126,10 +126,12 @@ class AgentRuntime:
         while True:
             agent = {**agent, "model": model}
             route_id, route_started = None, None
-            if self.router:
-                agent, route_id, route_started = self.router.start(agent, pid, meta, kind, model, reason)
+            project = self.db.one('SELECT size FROM projects WHERE id=?', pid) if pid else None
+            run_limit = (self.s.raw.get('pipeline') or {}).get(
+                'max_project_runs', 40 if project and project['size'] == 'small' else 80)
             run_id = self.runs.start(agent, pid, meta.get("ticket_id"),
-                                     meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions)
+                                     meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions,
+                                     limit=run_limit if pid else None)
             if not tried:
                 for s in waiting:
                     self.runs.event(run_id, "steer", f"{s['author']}: {s['body']}")
@@ -137,13 +139,16 @@ class AgentRuntime:
                 self.runs.event(run_id, "text", f"(Continuing on {model}: {reason}.)")
             kw["meta"] = {**meta, "run_id": run_id}
             try:
+                if self.router:
+                    agent, route_id, route_started = self.router.start(agent, pid, meta, kind, model, reason)
                 res = self._run(agent, instructions, ws, **kw)
-            except Exception as exc:
-                self.runs.finish(run_id, "failed", f"{type(exc).__name__}: {exc}")
+            except BaseException as exc:
+                self.runs.finish(run_id, "failed" if isinstance(exc, Exception) else "stopped",
+                                 f"{type(exc).__name__}: {exc}")
                 limited = isinstance(exc, EngineUnavailable)
                 if route_id:
                     self.router.finish(route_id, route_started, 'unavailable' if limited else 'failed', run_id)
-                if not (limited and failover):
+                if isinstance(exc, ProjectRunLimit) or not (limited and failover):
                     raise
                 until = failover.rest(model, str(exc))
                 tried.append(model)
@@ -342,6 +347,32 @@ class AgentRuntime:
                 notes.append(f"{name}: {exc}")
                 result.tool_log.append(f"{name} (failed)")
         result.text = text + (("\n\n(Vittics Builder could not use part of the reply: " + "; ".join(notes) + ")") if notes else "")
+        if ("submit_review" in names and not chat_with and result.review is None
+                and result.completed and not meta.get("review_repair")
+                and (meta.get("author") or meta.get("purpose") == "integration" or "submit_review" in instructions)):
+            # A valid-looking narrative is not a verdict. Ask the same reviewer to
+            # repair the rejected/missing action once, without editing or extra actions.
+            diagnostic = "; ".join(notes) or "No structured review action was submitted."
+            if meta.get("run_id") and self.runs:
+                self.runs.event(meta["run_id"], "error", "Review action rejected; retrying once: " + diagnostic)
+            scope = ("This is release integration: include every PRD acceptance criterion, including manual checks. "
+                     if meta.get("purpose") == "integration" else
+                     "This is a scoped assignment: acceptance entries must assess criteria within this ticket. "
+                     "Describe release checks owned by other tickets as deferred context in notes; do not claim they passed. ")
+            repaired = self._run_cli(agent, role, ["submit_review"],
+                instructions + "\n\nYour previous response could not supply a valid review:\n" + result.text[-12000:] +
+                "\n\nValidation error: " + diagnostic + "\n" + scope +
+                "If any required criterion in scope is failed or unverified, request_changes and identify the gap. "
+                "Never invent evidence or change unverified to passed just to satisfy the validator. "
+                "Do not edit files, run commands, create tickets or repeat prior actions. "
+                "Return exactly one valid vittics-builder JSON block with the review action. "
+                "submit_review is a JSON action, not a native CLI tool.",
+                ws, project_id, {**meta, "review_repair": True}, None, None, memories)
+            repaired.turns += result.turns
+            repaired.tool_log = result.tool_log + repaired.tool_log
+            if repaired.review is None:
+                repaired.text += "\nReview remains incomplete after one retry. Original validation error: " + diagnostic
+            return repaired
         return result
 
     def _execute(self, agent, name, args, ws, result, project_id, meta, depth) -> str:
@@ -460,7 +491,16 @@ class AgentRuntime:
                     raise ToolError("Acceptance entries need criterion, status and observed evidence or the missing prerequisite.")
                 if args["verdict"] == "approve" and any(item["status"] != "passed" for item in acceptance):
                     raise ToolError("Cannot approve with failed or unverified acceptance criteria. Request changes and identify the gaps.")
+            blocker = args.get("blocker_type")
+            if blocker is not None and blocker not in ("defect", "verification"):
+                raise ToolError("Review blocker_type must be defect or verification.")
+            if blocker == "verification" and (args["verdict"] != "request_changes" or not acceptance
+                    or not any(item["status"] == "unverified" for item in acceptance)
+                    or any(item["status"] == "failed" for item in acceptance)):
+                raise ToolError("Verification-only blockers require request_changes, unverified evidence, and no failed criteria.")
             result.review = {"score": score, "verdict": args["verdict"], "notes": args.get("notes", "")}
+            if blocker is not None:
+                result.review["blocker_type"] = blocker
             if acceptance is not None:
                 result.review["acceptance"] = acceptance
             return "Review received."

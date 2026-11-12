@@ -74,7 +74,7 @@ ACTIONS = {
     'submit_evaluation': ('evaluation','{"scores": {"functionality": 0, "ux": 0, "security": 0, "cost": 0, "architecture": 0, "scalability": 0, "customer_value": 0, "maintainability": 0}, "findings": [{"title": "...", "body": "evidence", "severity": "error"}]}'),
     "submit_plan": ("plan", '[{"key": "short-id", "title": "...", "description": "what to build and how to tell it '
                             'is done", "role": "role id", "depends_on": ["other-key"]}]'),
-    "submit_review": ("review", '{"score": 0-100, "verdict": "approve" or "request_changes", "notes": "concrete findings", "acceptance": [{"criterion": "PRD criterion", "status": "passed|failed|unverified", "evidence": "observed result"}]}'),
+    "submit_review": ("review", '{"score": 0-100, "verdict": "approve" or "request_changes", "notes": "concrete findings", "blocker_type": "defect" or "verification" (optional), "acceptance": [{"criterion": "PRD criterion", "status": "passed|failed|unverified", "evidence": "observed result"}]}'),
     "submit_assessment": ("assessment", '{"recommendation": "build_internal" | "build_to_sell" | "park" | "drop", '
                                         '"feasibility": "achievable" | "achievable_with_risks" | "not_achievable", '
                                         '"summary": "three to six sentences"}'),
@@ -100,6 +100,10 @@ class EngineUnavailable(EngineError):
     """The engine refused to work (usage limit, rate limit, not signed in). Nobody failed: pause and resume later."""
 
 
+class ProjectRunLimit(EngineUnavailable):
+    """A durable project allowance requires explicit review, not an engine retry."""
+
+
 UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hit your .{0,30}limit|quota|too many requests|"
                          r"not logged in|please run /login|overloaded|selected model is at capacity|temporarily unavailable", re.I)
 
@@ -115,6 +119,14 @@ def protocol(names: list[str]) -> str:
                 "Use only IDs from the CTO-approved product.json. Finish that reply with run_checks alone; Vittics will run them "
                 "on this computer and resume you with the actual results before you submit work.\n"
                 if "run_approved_checks" in names else "")
+    if "submit_review" in names:
+        guidance += ("Reviewers must submit the review JSON action below, even though no native submit_review tool exists. "
+                     "An approve verdict cannot include failed or unverified acceptance entries. "
+                     "For ticket review, assess the ticket's own criteria; describe unrelated deferred release gates in notes. "
+                     "For release integration review, include every PRD criterion, including manual checks. "
+                     "When missing execution evidence is the only blocker, request_changes with blocker_type verification, "
+                     "unverified acceptance entries, and concrete human verification steps in notes. "
+                     "Use defect if any criterion actually failed. Missing access is not an implementation defect.\n")
     return guidance + ("When you are finished, reply with a short plain summary, then end with exactly one fenced block "
             "tagged vittics-builder holding a JSON object with only the keys you use:\n```vittics-builder\n{\n"
             + ",\n".join(rows) + "\n}\n```\nUse the block for these company actions; do your file and command work "

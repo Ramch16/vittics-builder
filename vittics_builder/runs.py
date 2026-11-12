@@ -28,9 +28,31 @@ class Runs:
     def __init__(self, db: DB) -> None:
         self.db = db
 
-    def start(self, agent: dict, project_id: int | None, ticket_id: int | None, purpose: str, instructions: str) -> int:
-        rid = self.db.run("INSERT INTO runs (agent_id, project_id, ticket_id, purpose, status, started_at) "
-                          "VALUES (?,?,?,?,?,?)", agent["id"], project_id, ticket_id, purpose, "running", now())
+    def start(self, agent: dict, project_id: int | None, ticket_id: int | None, purpose: str, instructions: str,
+              *, limit: int | None = None) -> int:
+        from .engines import ProjectRunLimit
+        if limit is not None and (type(limit) is not int or limit < 0):
+            raise ValueError("pipeline.max_project_runs must be a nonnegative integer or null.")
+        # Reserve before launching, under a database write lock shared by all processes.
+        # Failed and interrupted runs still consumed allowance and remain counted.
+        with self.db.lock:
+            self.db.conn.execute('SAVEPOINT run_reservation')
+            try:
+                if project_id is not None and limit is not None:
+                    self.db.run('UPDATE projects SET updated_at=updated_at WHERE id=?', project_id)
+                    used = self.db.one('SELECT COUNT(*) AS n FROM runs WHERE project_id=?', project_id)['n']
+                    if used >= limit:
+                        raise ProjectRunLimit(
+                            f'Project agent-run limit reached ({used}/{limit}). No agent was launched. '
+                            'Work is preserved. Review the run history before explicitly increasing '
+                            'pipeline.max_project_runs; retrying alone will not reset this limit.')
+                rid = self.db.run("INSERT INTO runs (agent_id, project_id, ticket_id, purpose, status, started_at) "
+                                  "VALUES (?,?,?,?,?,?)", agent["id"], project_id, ticket_id, purpose, "running", now())
+            except BaseException:
+                self.db.conn.execute('ROLLBACK TO run_reservation')
+                raise
+            finally:
+                self.db.conn.execute('RELEASE run_reservation')
         self.event(rid, "instruction", _clip(instructions, 4000))
         return rid
 

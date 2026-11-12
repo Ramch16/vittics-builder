@@ -91,3 +91,13 @@ def test_invalid_limits_fail_before_launch(co, limit):
     co.s.raw.setdefault('pipeline', {})['max_project_repairs'] = limit
     with pytest.raises(PipelineError, match='nonnegative'):
         co.pipeline._reserve_builder_start(p['id'], tasks[0]['id'])
+
+
+def test_standard_project_has_shared_default_repair_limit(co):
+    p = co.pipeline.create_project('Standard', 'Test')
+    fixes = [co.pipeline._fix_task(p['id'], f'Fix {i}', f'Defect {i}') for i in range(4)]
+    for tid in fixes[:3]:
+        co.pipeline._reserve_builder_start(p['id'], tid)
+    with pytest.raises(PipelineError, match='3/3'):
+        co.pipeline._reserve_builder_start(p['id'], fixes[3])
+    assert co.db.one('SELECT builder_starts FROM tasks WHERE id=?', fixes[3])['builder_starts'] == 0
