@@ -57,6 +57,10 @@ class Vault:
         self._write(pid, data)
         self.db.log("vault", f"{by} removed the key {name}.", pid, actor=by)
 
+    def erase(self, pid: int) -> None:
+        """Remove every key of a project and leave nothing in the log: the project itself is being removed."""
+        self._path(pid).unlink(missing_ok=True)
+
     def names(self, pid: int) -> list[str]:
         return sorted(self._read(pid))
 

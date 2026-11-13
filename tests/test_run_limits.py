@@ -60,7 +60,7 @@ def test_invalid_cap_rejected(co, limit):
         co.runs.start(co.org.agent('Ram'), None, None, 'chat', 'Hi', limit=limit)
 
 
-@pytest.mark.parametrize('size, limit', [('small', 40), ('standard', 80)])
+@pytest.mark.parametrize('size, limit', [('small', 60), ('standard', 150)])
 def test_default_allowance_is_enforced_before_runtime(co, monkeypatch, size, limit):
     p = co.pipeline.create_project('Bounded', 'Test', size=size)
     agent = co.org.agent('Ram')
@@ -86,10 +86,13 @@ def test_project_limit_pause_does_not_suggest_engine_retry(co):
     from vittics_builder.pipeline import PipelineError
     p = co.pipeline.create_project('Bounded', 'Test')
     co.s.raw.setdefault('pipeline', {})['max_project_runs'] = 0
-    with pytest.raises(PipelineError, match='retrying alone will not reset'):
+    with pytest.raises(PipelineError, match='agent-run limit reached') as stop:
         co.pipeline.advance(p['id'])
+    assert 'Resume once it is back' not in str(stop.value)          # not an engine pause
     assert not co.db.all('SELECT * FROM runs WHERE project_id=?', p['id'])
     assert not co.pipeline.running(p['id'])
+    [decision] = [a for a in co.pipeline.inbox('cto') if a['kind'] == 'limit']      # and it is not silent
+    assert 'agent runs allowance' in decision['title']
 
 
 def test_nested_project_limit_does_not_rest_provider_or_failover(co, monkeypatch):

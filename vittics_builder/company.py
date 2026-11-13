@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from .agent import AgentRuntime
@@ -82,6 +83,7 @@ class Company:
         self.memory = Memory(self.db)
         self.runtime.memory = self.memory
         self.runs = Runs(self.db)
+        self.runs.reap()                      # runs a closed or crashed app left marked as running
         self.runtime.runs = self.runs
         self.skills = Skills(self.s)
         self.runtime.skills = self.skills
@@ -122,6 +124,61 @@ class Company:
         else:
             rows = self.db.all("SELECT * FROM events ORDER BY id DESC LIMIT ?", limit)
         return rows[::-1]
+
+    def delete_project(self, pid: int, by: str) -> dict:
+        """Permanently remove a project: its tickets, runs, decisions, memories and costs, its keys and preview,
+        and its folders. Agents, departments and settings stay. This cannot be undone."""
+        from .pipeline import PipelineError
+        project = self.pipeline.project(pid)
+        if self.pipeline.running(pid):
+            raise PipelineError(f"{project['name']} is working right now. Pause it and wait for the work in progress "
+                                "to finish before removing it.")
+        self.previews.stop(pid, by)
+        removed: dict[str, int] = {}
+        with self.db.lock:
+            self.db.conn.execute("BEGIN IMMEDIATE")          # all of it or none of it
+            try:
+                self._remove_project_rows(pid, removed)
+                self.db.conn.execute("COMMIT")
+            except BaseException:
+                self.db.conn.execute("ROLLBACK")
+                raise
+        self.vault.erase(pid)                     # after the rows: a failure above must not lose a surviving project's keys
+        if "memory_search" in {r["name"] for r in self.db.conn.execute("SELECT name FROM sqlite_master")}:
+            self.db.conn.execute("INSERT INTO memory_search(memory_search) VALUES ('rebuild')")
+        folders = [Path(project["workspace"])] if project["workspace"] else []
+        for parent, pattern in ((self.s.workspaces / ".worktrees", f"{pid:03d}-*"),
+                                (self.s.workspaces / ".previews", f"{pid}-*")):
+            folders += sorted(parent.glob(pattern)) if parent.is_dir() else []
+        root = self.s.workspaces.resolve()
+        for folder in folders:                  # only ever inside this company's workspaces folder
+            if folder.exists() and root in folder.resolve().parents:
+                shutil.rmtree(folder, ignore_errors=True)
+        self.db.log("project", f"{by} removed the project {project['name']} permanently.", None, actor=by)
+        return {"name": project["name"], "removed": {t: n for t, n in removed.items() if n}}
+
+    def _remove_project_rows(self, pid: int, removed: dict) -> None:
+        db = self.db
+        tables = {r["name"]: {c["name"] for c in db.conn.execute(f"PRAGMA table_info({r['name']})")}
+                  for r in db.conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE "
+                                           "'sqlite_%' AND name NOT LIKE 'memory_search%'").fetchall()}
+        tasks = [r["id"] for r in db.conn.execute("SELECT id FROM tasks WHERE project_id=?", (pid,))]
+        runs = [r["id"] for r in db.conn.execute("SELECT id FROM runs WHERE project_id=?", (pid,))]
+
+        def drop(table: str, where: str, args: tuple) -> None:
+            removed[table] = removed.get(table, 0) + db.conn.execute(f"DELETE FROM {table} WHERE {where}", args).rowcount
+        for start in range(0, len(tasks), 500):
+            part = tasks[start:start + 500]
+            drop("ticket_comments", f"task_id IN ({','.join('?' * len(part))})", tuple(part))
+        for start in range(0, len(runs), 500):
+            part = runs[start:start + 500]
+            for table in ("run_events", "steers"):
+                if table in tables:
+                    drop(table, f"run_id IN ({','.join('?' * len(part))})", tuple(part))
+        for table, columns in tables.items():
+            if table != "projects" and "project_id" in columns:
+                drop(table, "project_id=?", (pid,))
+        drop("projects", "id=?", (pid,))
 
     def _reroot_workspaces(self) -> None:
         """Projects whose saved workspace path is gone, but whose folder is in this company's workspaces/

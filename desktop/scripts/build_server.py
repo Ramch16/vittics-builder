@@ -21,6 +21,20 @@ def target_triple() -> str:
     return next(line.split(": ", 1)[1] for line in out.splitlines() if line.startswith("host: "))
 
 
+def record_commit() -> Path | None:
+    """Write the commit this build is made from into the package, so the app can say which build it is."""
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short=7", "HEAD"], cwd=REPO, capture_output=True, text=True,
+                             check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=REPO, capture_output=True,
+                               text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None                                 # not a git checkout: the app then shows the version only
+    path = PACKAGE / "_build.py"
+    path.write_text(f'COMMIT = "{sha}{"-dirty" if dirty else ""}"\n', encoding="utf-8")
+    return path
+
+
 def main() -> None:
     python = os.environ.get("VITTICS_PYTHON") or sys.executable
     if os.environ.get("VITTICS_PYTHON") is None and (REPO / ".venv").exists():
@@ -40,7 +54,12 @@ def main() -> None:
             cmd += ["--add-data", f"{src}{sep}{dest}"]
     cmd.append(str(HERE / "scripts" / "server_entry.py"))
     print("Building", name, "with", python, "on", platform.platform())
-    subprocess.run(cmd, check=True, cwd=REPO)
+    recorded = record_commit()
+    try:
+        subprocess.run(cmd, check=True, cwd=REPO)
+    finally:
+        if recorded:
+            recorded.unlink(missing_ok=True)        # keep the working tree clean
     shutil.rmtree(work, ignore_errors=True)
     print("Wrote", HERE / "src-tauri" / "binaries" / (name + (".exe" if os.name == "nt" else "")))
 

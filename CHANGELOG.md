@@ -1,6 +1,40 @@
 # Changelog
 
 ## Unreleased
+From two pilots of tiny tools (a personal checklist used 12.7M tokens; 86% of them went on legal, support and
+documentation tickets, and the project then sat idle for two hours without saying why):
+- **A project that stops says so.** When a project reaches its repair or agent-run allowance, or stops for any
+  other reason (nobody can take a ticket, a reviewer gave no verdict), the CTO now gets a decision with the reason
+  and the open tickets: **Allow more and continue** (the limit is raised for that project only, with no org.yaml
+  edit or restart), **Try again**, or **Pause project**. Nothing is retried or logged again while one waits.
+  Tickets that failed without ever reaching the CTO are now escalated instead of ending in "tasks cannot start".
+- **Saner default limits**: 6 repairs and 150 agent runs for a Standard project (2 and 60 for Small), sized from
+  real pilots (a one-page tool used about 110 runs). `pipeline.max_project_repairs` and `max_project_runs` still
+  override them; `null` turns a limit off.
+- **Ghost runs are cleared.** Runs left marked "running" by a closed or crashed app are marked stopped at start-up
+  (each run now records the process that started it), so they no longer count toward limits or look busy.
+- **Fewer tokens.** Reviewers get the ticket's diff and the check results in their prompt, a budget of about a
+  dozen tool calls and a rule not to re-run checks Vittics already ran. Builders read only what their ticket needs
+  (document tickets no longer start by reading the whole design), every agent gets a document rule (create a new
+  document only when asked, keep it short, link instead of restating) and must quote numbers only from real
+  output, never invent them. An internal tool is no longer given legal, support or documentation tickets unless
+  the assessment found a need.
+- **Size: Auto.** New projects default to Auto: Small when the brief says it is a small local tool (single page,
+  personal, localStorage, calculator...) and asks for nothing heavy (accounts, database, payments, a backend,
+  teams, customers...); otherwise Standard. "No backend, login or deployment" is understood as not wanting them.
+  The choice and its reason are logged; pick Small or Standard yourself at any time.
+- **Costs shows cached versus fresh input.** Claude Code re-reads the conversation on every turn and Vittics counts
+  those cached tokens as input; the Costs page now shows how much of the input was re-read from cache, and each
+  project's calls and tokens.
+- **An expired login is not an agent's failure.** "OAuth session expired" and similar now pause the work with the
+  exact command to sign in again (`claude auth login`, `codex login`), instead of failing tickets and sending
+  them back. New hires on a subscription are named from the name pool without an "ANTHROPIC_API_KEY is not set"
+  warning.
+- **Remove project** (project page, CEO only; `vittics-builder delete-project ID --yes "Exact name"`): permanently
+  removes a project's tickets, history, costs, memories, keys, previews and folders in one all-or-nothing step,
+  after you type its name. Agents and settings stay.
+- **The app says which build it is**: the sidebar shows the version and the commit it was built from
+  (`0.26.0+7784264`), so a release and a later build no longer look the same.
 - Hold verification-only release blockers for human evidence instead of opening implementation repairs.
   Add CTO-owned verification holds and separate wait, retry-verification and explicit code-repair actions;
   failed checks and unexecuted requirements still prevent release approval.

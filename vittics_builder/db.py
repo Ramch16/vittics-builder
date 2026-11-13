@@ -366,6 +366,11 @@ class DB:
         usage_columns = {r['name'] for r in self.conn.execute('PRAGMA table_info(usage)')}
         if 'run_id' not in usage_columns:
             self.conn.execute('ALTER TABLE usage ADD COLUMN run_id INTEGER')
+        if 'cached_tokens' not in usage_columns:     # input tokens the model re-read from its cache (a part of input_tokens)
+            self.conn.execute('ALTER TABLE usage ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0')
+        run_columns = {r['name'] for r in self.conn.execute('PRAGMA table_info(runs)')}
+        if 'owner_pid' not in run_columns:           # the process that started the run: a dead one means a ghost run
+            self.conn.execute('ALTER TABLE runs ADD COLUMN owner_pid INTEGER')
         have = {r["name"] for r in self.conn.execute("PRAGMA table_info(memories)")}
         for column, default in (("category", "decision"), ("source", ""), ("evidence_files", "{}")):
             if column not in have:
@@ -406,7 +411,9 @@ class DB:
                              ("autopilot_roles", "TEXT NOT NULL DEFAULT 'ceo,cto'"),
                              ("approval_overrides", "TEXT NOT NULL DEFAULT '{}'"),
                              ("size", "TEXT NOT NULL DEFAULT 'standard'"),
-                             ("repair_starts", "INTEGER NOT NULL DEFAULT 0")):
+                             ("repair_starts", "INTEGER NOT NULL DEFAULT 0"),
+                             # a limit the CTO raised for this project (NULL: the company default applies)
+                             ("repair_cap", "INTEGER"), ("run_cap", "INTEGER")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
                 self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.

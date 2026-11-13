@@ -472,7 +472,8 @@ sign-off, design and release review wait for the CTO to opt in. In the desktop a
 one person acts as both, so a level covers both. Choosing a different level starts over with just you;
 `off` turns it off for both.
 
-**Size.** Choose **Small** for something like a calculator, a form or a single page (`--size small`): it
+**Size.** New projects default to **Auto**: Small when the brief says it is a small local tool and asks for
+nothing heavy, otherwise Standard (the choice and why are logged, and you can change it). Choose **Small** for something like a calculator, a form or a single page (`--size small`): it
 skips the idea assessment, keeps the requirements to at most 8 acceptance criteria, has one reviewer per
 ticket, sends a ticket to the CTO after one repair attempt instead of two, and has no audits (release QA and
 the acceptance checks still run). **Standard** (the default) is the full process, for products with real
@@ -491,6 +492,12 @@ vittics-builder build "A tip calculator page that splits a bill" --size small --
   started, already working, or which decision it is waiting for.
 - **The computer stays awake** while Vittics Builder runs (`machine.keep_awake` in org.yaml), so overnight
   work is not frozen.
+- **A project that stops tells you why.** If it reaches its allowance (6 repairs and 150 agent runs for a
+  Standard project, 2 and 60 for Small; `pipeline.max_project_repairs` and `max_project_runs` change them) or
+  stops for another reason, the CTO gets a decision: **Allow more and continue**, **Try again** or **Pause
+  project**. The Costs page shows how much input was re-read from Claude's cache versus read fresh.
+- **Remove project** (CEO, on the project page, or `vittics-builder delete-project ID`) permanently removes a
+  project and everything it made, after you type its name. It cannot be undone.
 
 - **Some things always wait for you:** the final sign-off, any failure (blocked release,
   escalated ticket, failed deployment), changed acceptance checks, budgets, hiring and installs. A

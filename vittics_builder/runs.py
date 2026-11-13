@@ -7,6 +7,8 @@ next step (for CLI engines, which run in one go, at the start of its next run).
 from __future__ import annotations
 
 import json
+import os
+from datetime import datetime, timedelta, timezone
 
 from .db import DB, now
 
@@ -22,6 +24,18 @@ def describe_call(name: str, args: dict) -> str:
     """A tool call, readable: long values (file contents) are shortened."""
     shown = {k: (_clip(v, 160) if isinstance(v, str) else v) for k, v in (args or {}).items()}
     return f"{name}({json.dumps(shown, ensure_ascii=False)[:600]})"
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                              # it exists; it just is not ours
+    except OSError:
+        return False
+    return True
 
 
 class Runs:
@@ -44,10 +58,10 @@ class Runs:
                     if used >= limit:
                         raise ProjectRunLimit(
                             f'Project agent-run limit reached ({used}/{limit}). No agent was launched. '
-                            'Work is preserved. Review the run history before explicitly increasing '
-                            'pipeline.max_project_runs; retrying alone will not reset this limit.')
-                rid = self.db.run("INSERT INTO runs (agent_id, project_id, ticket_id, purpose, status, started_at) "
-                                  "VALUES (?,?,?,?,?,?)", agent["id"], project_id, ticket_id, purpose, "running", now())
+                            'Work is preserved. The CTO decides whether to allow more runs.', used, limit)
+                rid = self.db.run("INSERT INTO runs (agent_id, project_id, ticket_id, purpose, status, started_at, owner_pid) "
+                                  "VALUES (?,?,?,?,?,?,?)", agent["id"], project_id, ticket_id, purpose, "running", now(),
+                                  os.getpid())
             except BaseException:
                 self.db.conn.execute('ROLLBACK TO run_reservation')
                 raise
@@ -64,6 +78,22 @@ class Runs:
         if text:
             self.event(run_id, "result", text)
         self.db.run("UPDATE runs SET status=?, ended_at=? WHERE id=?", status, now(), run_id)
+
+    def reap(self, stale_after: int = 3600) -> int:
+        """Mark runs that can no longer be running as stopped, so a restart does not leave ghosts behind: runs
+        started by a process that has exited, and runs from before processes were recorded that are older than
+        any run may last. Returns how many were stopped."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=stale_after)).isoformat(timespec="seconds")
+        stopped = 0
+        for row in self.db.all("SELECT id, owner_pid, started_at FROM runs WHERE status='running'"):
+            if row["owner_pid"]:
+                dead = row["owner_pid"] != os.getpid() and not _alive(row["owner_pid"])
+            else:
+                dead = row["started_at"] < cutoff
+            if dead:
+                self.finish(row["id"], "stopped", "Interrupted: the app was closed or restarted while this ran.")
+                stopped += 1
+        return stopped
 
     # ---- steering ----------------------------------------------------------
     def steer(self, agent_id: int, by: str, body: str) -> dict:

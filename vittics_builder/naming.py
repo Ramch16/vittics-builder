@@ -27,6 +27,8 @@ def make_namer(db: DB, settings: Settings, provider):
                  or db.one("SELECT * FROM agents WHERE status!='fired' ORDER BY status!='active', id LIMIT 1"))
         if not namer:
             return None
+        if str(namer["model"]).startswith("cli:"):
+            return None                     # a subscription engine is not a model API to ask: use the name pool, quietly
         blocked = {n.lower() for n in taken} | {settings.ceo_name.lower(), settings.cto_name.lower()}
         team = [r["name"] for r in db.all("SELECT a.name FROM agents a JOIN roles r ON r.id=a.role "
                                           "WHERE a.status!='fired' AND r.department=?", role["department"])]

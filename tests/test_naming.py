@@ -75,3 +75,11 @@ def test_approved_workload_hire_is_named_by_the_team(co):
     co.pipeline.decide(ask["id"], "cto", "approved")
     names = {a["name"] for a in co.org.staff(role="backend_engineer")}
     assert names == {"Hari", "Sandy", "Kiran"}
+
+
+def test_a_subscription_team_uses_the_name_pool_without_a_warning(co):
+    co.db.run("UPDATE agents SET model='cli:claude-code'")           # everyone works through a coding CLI
+    hired = co.org.hire("backend_engineer", by=co.s.cto_name)
+    assert hired["name"] in NAME_POOL
+    assert not naming_events(co)                                      # nobody "named" them
+    assert not co.db.all("SELECT 1 FROM events WHERE kind='warn' AND message LIKE '%could not name%'")

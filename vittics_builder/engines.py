@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from pathlib import Path
 import subprocess
 import tempfile
 from fnmatch import fnmatchcase
@@ -103,6 +104,15 @@ class EngineUnavailable(EngineError):
 class ProjectRunLimit(EngineUnavailable):
     """A durable project allowance requires explicit review, not an engine retry."""
 
+    def __init__(self, message: str, used: int = 0, limit: int = 0) -> None:
+        super().__init__(message)
+        self.used, self.limit = used, limit
+
+
+# A login that has expired is nobody's failure and no agent's fault: pause, say how to sign in, and resume.
+SIGNED_OUT = re.compile(r"failed to authenticate|oauth (session|token) (has )?expired|could not be refreshed|"
+                        r"authentication_error|not authenticated", re.I)
+SIGN_IN = {"claude": "claude auth login", "codex": "codex login"}
 
 UNAVAILABLE = re.compile(r"session limit|usage limit|rate limit|limit reached|hit your .{0,30}limit|quota|too many requests|"
                          r"not logged in|please run /login|overloaded|selected model is at capacity|temporarily unavailable", re.I)
@@ -232,12 +242,18 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
                    cost=data.get("total_cost_usd"), turns=int(data.get("num_turns") or 1),
                    input_tokens=int(usage.get("input_tokens", 0)) + int(usage.get("cache_read_input_tokens", 0))
                    + int(usage.get("cache_creation_input_tokens", 0)),
+                   cached_tokens=int(usage.get("cache_read_input_tokens", 0)),   # re-read on every turn: cheap, but counted
                    output_tokens=int(usage.get("output_tokens", 0)))
     if engine.get("usage_pattern") and (m := re.search(engine["usage_pattern"], proc.stderr or "")):
         out["input_tokens"] = int(m[1].replace(",", ""))           # a total only: no input/output split
     if out["is_error"] and not out["text"]:
         out["text"] = (proc.stderr or "").strip()[-2000:]     # the error is at the end (Codex echoes the prompt first)
     failure_text = out["text"] + "\n" + (proc.stderr or "")[-2000:]
+    if out["is_error"] and (m := SIGNED_OUT.search(failure_text)):
+        start = failure_text.rfind("\n", 0, m.start()) + 1
+        command = SIGN_IN.get(Path(str(engine["command"][0])).name, "the engine's sign-in command")
+        raise EngineUnavailable(f"{failure_text[start:].strip().splitlines()[0][:200]} Sign in again by running "
+                                f"`{command}` in a terminal, then resume.")
     if out["is_error"] and (m := UNAVAILABLE.search(failure_text)):
         start = failure_text.rfind("\n", 0, m.start()) + 1
         raise EngineUnavailable(failure_text[start:].strip()[:300])
