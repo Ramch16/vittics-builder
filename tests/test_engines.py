@@ -264,3 +264,31 @@ def test_missing_cli_review_requires_explicit_structured_verdict(cli, monkeypatc
     res = co.runtime.run(reviewer, 'Review.', None, meta={'author': 'Hari'})
     assert res.review['verdict'] == 'request_changes'
     assert not replies
+
+
+def test_an_expired_login_pauses_work_with_the_fix_instead_of_blaming_the_agent(tmp_path):
+    import sys
+    import pytest
+    from vittics_builder.engines import BUILTIN_ENGINES, run_cli, EngineUnavailable
+    script = tmp_path / "claude.py"
+    script.write_text('import json, sys\nprint(json.dumps({"is_error": True, "result": '
+                      '"Failed to authenticate: OAuth session expired and could not be refreshed", "usage": {}}))\nsys.exit(1)\n')
+    engine = {"command": [sys.executable, str(script)], "output": "claude-json", "prompt": "stdin",
+              "sign_in": BUILTIN_ENGINES["claude-code"]["sign_in"]}
+    with pytest.raises(EngineUnavailable, match="claude auth login") as stop:
+        run_cli(engine, system="", prompt="review", cwd=str(tmp_path), model="", write=False, run=False, timeout=10)
+    assert "OAuth session expired" in str(stop.value) and "then resume" in str(stop.value)
+    engine.pop("sign_in")                                       # an engine with no hint still says to sign in again
+    with pytest.raises(EngineUnavailable, match="Sign in again"):
+        run_cli(engine, system="", prompt="review", cwd=str(tmp_path), model="", write=False, run=False, timeout=10)
+
+
+def test_a_normal_failure_mentioning_authentication_is_still_the_agents_own(tmp_path):
+    import sys
+    from vittics_builder.engines import run_cli
+    script = tmp_path / "agent.py"
+    script.write_text('import json, sys\nprint(json.dumps({"is_error": True, "result": '
+                      '"Stopped: reached the turn limit while building the login page", "usage": {}}))\nsys.exit(1)\n')
+    engine = {"command": [sys.executable, str(script)], "output": "claude-json", "prompt": "stdin"}
+    out = run_cli(engine, system="", prompt="build", cwd=str(tmp_path), model="", write=True, run=True, timeout=10)
+    assert out["is_error"] and "turn limit" in out["text"]

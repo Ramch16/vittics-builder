@@ -28,15 +28,17 @@ def price(settings: Settings, model: str) -> tuple[float, float] | None:
 
 
 def record_usage(db: DB, settings: Settings, agent: dict, project_id: int | None, input_tokens: int,
-                 output_tokens: int, purpose: str = "", cost: float | None = None, run_id: int | None = None) -> float:
+                 output_tokens: int, purpose: str = "", cost: float | None = None, run_id: int | None = None,
+                 cached_tokens: int = 0) -> float:
     """Add one model call to the ledger (and the agent's running totals). Returns its estimated cost.
-    `cost` overrides the price list: CLI engines report their own (0 on a flat-fee subscription)."""
+    `cost` overrides the price list: CLI engines report their own (0 on a flat-fee subscription).
+    `cached_tokens` is the part of `input_tokens` the model re-read from its cache instead of reading fresh."""
     rate = (0.0, 0.0) if cost is not None else price(settings, agent["model"])
     if cost is None:
         cost = (input_tokens * rate[0] + output_tokens * rate[1]) / 1_000_000 if rate else 0.0
     db.run("INSERT INTO usage (agent_id, project_id, model, input_tokens, output_tokens, cost, priced, purpose, "
-           "created_at, run_id) VALUES (?,?,?,?,?,?,?,?,?,?)", agent["id"], project_id, agent["model"], input_tokens,
-           output_tokens, cost, 1 if rate else 0, purpose, now(), run_id)
+           "created_at, run_id, cached_tokens) VALUES (?,?,?,?,?,?,?,?,?,?,?)", agent["id"], project_id, agent["model"],
+           input_tokens, output_tokens, cost, 1 if rate else 0, purpose, now(), run_id, min(cached_tokens, input_tokens))
     db.run("UPDATE agents SET input_tokens=input_tokens+?, output_tokens=output_tokens+? WHERE id=?",
            input_tokens, output_tokens, agent["id"])
     return cost
@@ -49,8 +51,11 @@ def spent(db: DB, project_id: int) -> float:
 def summary(db: DB) -> dict:
     """Company-wide cost picture for the dashboard."""
     total = db.one("SELECT COALESCE(SUM(cost), 0) AS cost, COALESCE(SUM(input_tokens), 0) AS input_tokens, "
-                   "COALESCE(SUM(output_tokens), 0) AS output_tokens FROM usage")
-    projects = db.all("SELECT p.id, p.name, p.budget, p.stage, COALESCE(SUM(u.cost), 0) AS spent FROM projects p "
+                   "COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(cached_tokens), 0) AS cached_tokens "
+                   "FROM usage")
+    projects = db.all("SELECT p.id, p.name, p.budget, p.stage, COALESCE(SUM(u.cost), 0) AS spent, "
+                      "COALESCE(SUM(u.input_tokens), 0) AS input_tokens, COALESCE(SUM(u.cached_tokens), 0) AS cached_tokens, "
+                      "COALESCE(SUM(u.output_tokens), 0) AS output_tokens, COUNT(u.id) AS calls FROM projects p "
                       "LEFT JOIN usage u ON u.project_id=p.id GROUP BY p.id ORDER BY p.id DESC")
     departments = db.all("SELECT d.name AS department, COALESCE(SUM(u.cost), 0) AS spent FROM usage u "
                          "JOIN agents a ON a.id=u.agent_id JOIN roles r ON r.id=a.role "

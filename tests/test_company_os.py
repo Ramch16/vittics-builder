@@ -200,12 +200,14 @@ def test_hosted_application_requires_distinct_tokens_and_persists(tmp_path,monke
 
 @pytest.mark.skipif(not browser_available(),reason='Chromium not installed')
 def test_customer_personas_use_real_browser_and_fail_to_ticket(co,local_app):
-    p=project(co);co.s.raw['tools']={'browser':{'enabled':True,'timeout_seconds':5}}
+    # One deadline covers the browser launch, the page load and every step: 5s failed on busy Linux CI runners.
+    p=project(co);co.s.raw['tools']={'browser':{'enabled':True,'timeout_seconds':15}}
     run=co.assessments.customers(p['id'],{
         'beginner':{'url':local_app,'steps':[{'action':'fill','selector':'#name','value':'Customer'},{'action':'click','selector':'#login'},{'action':'assert_text','selector':'#greeting','value':'Welcome Customer'}]},
         'end_user':{'url':local_app,'steps':[{'action':'assert_text','value':'Missing feature'}]}})
     assert run['status']=='completed' and not run['report']['passed']
-    assert run['report']['personas'][0]['passed'] and not run['report']['personas'][1]['passed'], run['report']
+    seen=[(x['persona'],x['passed'],x.get('error')) for x in run['report']['personas']]
+    assert run['report']['personas'][0]['passed'] and not run['report']['personas'][1]['passed'], seen
     assert co.observability.list()[0]['ticket_id']
 
 

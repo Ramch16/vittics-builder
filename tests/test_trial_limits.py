@@ -9,6 +9,7 @@ from vittics_builder.pipeline import PipelineError
 
 def setup(co):
     p = co.pipeline.create_project('Bounded trial', 'Small project', size='small')
+    co.db.run('UPDATE projects SET repair_cap=1 WHERE id=?', p['id'])     # one repair, set for this project
     tasks = [co.tickets.create(p['id'], f'Task {i}', 'Implement', 'Lucky', status='todo',
                                role='backend_engineer') for i in range(2)]
     return p, tasks
@@ -55,6 +56,7 @@ def test_new_fix_tickets_share_the_same_budget(co):
 def test_exhausted_limit_does_not_launch_builder_or_complete_task(co, monkeypatch):
     p, tasks = setup(co)
     co.s.raw.setdefault('pipeline', {})['max_project_repairs'] = 0
+    co.db.run('UPDATE projects SET repair_cap=NULL WHERE id=?', p['id'])    # the company setting applies
     co.pipeline._reserve_builder_start(p['id'], tasks[0]['id'])
     def forbidden(*args, **kwargs):
         pytest.fail('Builder must not launch')
@@ -95,9 +97,9 @@ def test_invalid_limits_fail_before_launch(co, limit):
 
 def test_standard_project_has_shared_default_repair_limit(co):
     p = co.pipeline.create_project('Standard', 'Test')
-    fixes = [co.pipeline._fix_task(p['id'], f'Fix {i}', f'Defect {i}') for i in range(4)]
-    for tid in fixes[:3]:
+    fixes = [co.pipeline._fix_task(p['id'], f'Fix {i}', f'Defect {i}') for i in range(7)]
+    for tid in fixes[:6]:
         co.pipeline._reserve_builder_start(p['id'], tid)
-    with pytest.raises(PipelineError, match='3/3'):
-        co.pipeline._reserve_builder_start(p['id'], fixes[3])
-    assert co.db.one('SELECT builder_starts FROM tasks WHERE id=?', fixes[3])['builder_starts'] == 0
+    with pytest.raises(PipelineError, match='6/6'):
+        co.pipeline._reserve_builder_start(p['id'], fixes[6])
+    assert co.db.one('SELECT builder_starts FROM tasks WHERE id=?', fixes[6])['builder_starts'] == 0

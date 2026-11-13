@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from . import __version__
+from . import __version__, buildinfo
 from .chat import ChatError
 from .company import Company
 from .costs import summary as cost_summary
@@ -36,7 +36,7 @@ class NewProject(BaseModel):
     brief: str
     idea: bool = False
     budget: float | None = None
-    size: str = "standard"
+    size: str = "auto"
 
 
 class Build(BaseModel):
@@ -44,7 +44,7 @@ class Build(BaseModel):
     name: str = ""
     autopilot: str = "key"
     budget: float | None = None
-    size: str = "standard"
+    size: str = "auto"
 
 
 class Budget(BaseModel):
@@ -339,7 +339,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
             "idea_stages": IDEA_STAGES,
             "next_steps": NEXT_STEP,
             "departments": co.org.chart(include_fired=True),
-            "version": __version__,
+            "version": __version__, "build": buildinfo.label(),
             "autopilot_levels": __import__("vittics_builder.autopilot", fromlist=["LEVELS"]).LEVELS,
             "desktop": desktop,
             "ai": co.ai.status(),
@@ -501,8 +501,10 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
             raise HTTPException(400, f"Autopilot is one of: {', '.join(LEVELS)}.")
         who = co.s.human(role)
         # A small project skips the idea assessment: asking for it to be built is the decision.
+        from .sizing import suggest_size
+        resolved = suggest_size(brief)[0] if body.size == "auto" else body.size
         project = guard(lambda: co.pipeline.create_project(body.name.strip() or name_from(brief), brief, by=who,
-                                                           idea=body.size != "small", budget=body.budget,
+                                                           idea=resolved != "small", budget=body.budget,
                                                            size=body.size))
         co.pipeline.autopilot.set(project["id"], body.autopilot, who, roles=delegable(role))
         run_in_background(project["id"])
@@ -580,6 +582,16 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         project = guard(lambda: co.pipeline.pause(pid, co.s.human(role)))
         return {**project, "message": "Paused." if project["stage"] == "paused" else
                 "Pausing once the work in progress finishes."}
+
+    @app.post("/api/projects/{pid}/delete")
+    def delete_project(pid: int, data: dict, role: str = Depends(auth)) -> dict:
+        """Remove a project for good. Only the CEO may, and only by giving the project's exact name."""
+        if role != "ceo":
+            raise HTTPException(403, "Removing a project is the CEO's call.")
+        project = guard(lambda: co.pipeline.project(pid))
+        if str(data.get("confirm", "")).strip() != project["name"]:
+            raise HTTPException(400, "Type the project's exact name to confirm. Nothing was removed.")
+        return guard(lambda: co.delete_project(pid, co.s.human(role)))
 
     @app.post("/api/tasks")
     def new_task(body: NewTask, role: str = Depends(auth)) -> dict:

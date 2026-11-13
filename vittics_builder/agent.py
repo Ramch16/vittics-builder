@@ -10,6 +10,7 @@ from .config import Settings
 from .costs import record_usage
 from .engines import ACTIONS, EngineError, EngineUnavailable, ProjectRunLimit, actions_to_calls, parse_block, protocol, run_cli
 from .failover import limit_key
+from .limits import project_limit
 from .memory import MEMORY_TOOL_SPECS
 from .runs import describe_call
 from .db import DB
@@ -126,9 +127,7 @@ class AgentRuntime:
         while True:
             agent = {**agent, "model": model}
             route_id, route_started = None, None
-            project = self.db.one('SELECT size FROM projects WHERE id=?', pid) if pid else None
-            run_limit = (self.s.raw.get('pipeline') or {}).get(
-                'max_project_runs', 40 if project and project['size'] == 'small' else 80)
+            run_limit = project_limit(self.db, self.s, pid, 'runs') if pid else None
             run_id = self.runs.start(agent, pid, meta.get("ticket_id"),
                                      meta.get("purpose") or ("chat" if kw.get("chat_with") else kind), instructions,
                                      limit=run_limit if pid else None)
@@ -305,7 +304,7 @@ class AgentRuntime:
         cost = 0.0 if engine.get("subscription") else out["cost"]
         record_usage(self.db, self.s, agent, project_id, out["input_tokens"], out["output_tokens"],
                      f"{meta.get('purpose') or ('chat' if chat_with else role['kind'])} via {engine_name}", cost=cost,
-                     run_id=meta.get('run_id'))
+                     run_id=meta.get('run_id'), cached_tokens=out.get("cached_tokens", 0))
         text, data, problem = parse_block(out["text"])
         if meta.get("run_id") and self.runs:
             self.runs.event(meta["run_id"], "text", f"(through {engine_name}, {out['turns']} turns"

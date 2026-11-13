@@ -22,6 +22,7 @@ from pathlib import Path
 from .timings import timed_stage
 from .agent import AgentRuntime, RunResult
 from .costs import spent
+from .limits import NAMES, RAISE_BY, SETTINGS, project_limit, raise_limit, reached
 from .config import Settings
 from .db import DB, now
 from .org import Org
@@ -54,6 +55,17 @@ MILESTONES = {"release_approval": "Ready for release review", "release_blocked":
 PURPOSES = {"internal": "for internal use", "commercial": "to sell"}
 # small: a short PRD, one reviewer per ticket, one repair attempt and no audits. standard: the full process.
 SIZES = ("small", "standard")
+# Departments whose tickets are about documents, not code: they need the ticket's files, not the whole design.
+DOCUMENT_DEPARTMENTS = ("Customer Support", "Marketing", "Product", "Legal and Compliance")
+# Every document is read again by every later agent, on every turn: keep them proportionate and honest.
+DOC_RULES = ("Documents cost tokens each time an agent reads them again: create a new document only when this ticket "
+             "asks for one, keep it under about 4 KB, and link to other documents instead of restating them. Quote "
+             "counts, versions and results only from check output you were given or files you read; never estimate or "
+             "invent a number.")
+REVIEW_BUDGET = ("Review from the changes and check results above. Read another file only when they are not enough "
+                 "to judge, and do not re-run checks Vittics already ran: a focused review needs about a dozen tool "
+                 "calls, not a tour of the whole project. Flag any number, count or result in a document that you "
+                 "cannot find in the check output or the files.")
 SMALL_PRD = ("This is a small project: keep docs/PRD.md short, with at most 8 acceptance criteria that cover what "
              "the brief asks for. Do not add operational, compliance, backup, deployment, retention or capacity "
              "requirements unless the brief asks for them; list them under exclusions instead.")
@@ -78,6 +90,14 @@ CONSULTS = [
 
 class PipelineError(Exception):
     pass
+
+
+class ProjectLimit(PipelineError):
+    """A project allowance (repairs or agent runs) is used up: the CTO decides whether to allow more."""
+
+    def __init__(self, which: str, used: int, limit: int) -> None:
+        self.which, self.used, self.limit = which, used, limit
+        super().__init__(reached(which, used, limit))
 
 
 class Pipeline:
@@ -167,9 +187,13 @@ class Pipeline:
     def create_project(self, name: str, brief: str, by: str = "ceo", idea: bool = False,
                        budget: float | None = None, size: str = "standard") -> dict:
         """A project that starts building, or with `idea` an idea that is assessed and decided first.
-        `size` small runs a lighter process (see SIZES)."""
+        `size` small runs a lighter process (see SIZES); auto chooses from the brief (see sizing.py)."""
+        why = ""
+        if size == "auto":
+            from .sizing import suggest_size
+            size, why = suggest_size(brief)
         if size not in SIZES:
-            raise PipelineError(f"Size must be one of: {', '.join(SIZES)}.")
+            raise PipelineError(f"Size must be one of: {', '.join(SIZES)}, or auto.")
         ts = now()
         pid = self.db.run("INSERT INTO projects (name, brief, stage, author, budget, size, created_at, updated_at) "
                           "VALUES (?,?,?,?,?,?,?,?)", name, brief, "idea" if idea else "prd", by,
@@ -182,6 +206,9 @@ class Pipeline:
         ws.write_file("BRIEF.md", f"# {name}\n\n{brief}\n")
         ws.commit(f"{'Idea' if idea else 'Brief'} from {by}")
         self.db.log("project", f"New {'idea' if idea else 'project'}: {name}", pid, actor=by)
+        if why:
+            self.db.log("project", f"Size chosen automatically: {size}. {why} Change it on the project page if it is wrong.",
+                        pid, actor="Vittics Builder")
         return self.project(pid)
 
     def create_task(self, title: str, brief: str, by: str = "ceo", repo: str | None = None, issue: str | None = None,
@@ -284,6 +311,8 @@ class Pipeline:
         self._cycle_limits[pid] = {'remaining': max_cycles,
                                    'deadline': time.monotonic() + max_seconds if max_seconds else None}
         try:
+            if self._attention_pending(pid):         # waiting for the CTO: do not retry or log the same stop again
+                return self.project(pid)
             return self._advance(pid)
         except EngineUnavailable as exc:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress','in_review') "
@@ -291,14 +320,56 @@ class Pipeline:
             from .engines import ProjectRunLimit
             if isinstance(exc, ProjectRunLimit):
                 self.db.log('paused', str(exc), pid)
+                self._limit_decision(pid, 'runs', exc.used, exc.limit)
                 raise PipelineError(str(exc)) from exc
             self.db.log("paused", f"Work paused: {exc}. Nothing was counted against the team. "
                         f"Resume once it is back (Resume work, or `vittics-builder run {pid}`).", pid)
             raise PipelineError(f"Work paused: {exc}. Nothing was counted against the team; resume once it is back "
                                 f"with Resume work or `vittics-builder run {pid}`.") from exc
+        except ProjectLimit as exc:
+            self._limit_decision(pid, exc.which, exc.used, exc.limit)
+            raise
+        except PipelineError as exc:
+            self._attention(pid, str(exc))
+            raise
         finally:
             self._cycle_limits.pop(pid, None)
             lock.release()
+
+    # ---- stops that need a person --------------------------------------------
+    def _attention_pending(self, pid: int) -> bool:
+        return bool(self.db.one("SELECT 1 FROM approvals WHERE project_id=? AND status='pending' "
+                                "AND kind IN ('limit', 'attention')", pid))
+
+    def _open_tickets(self, pid: int, n: int = 6) -> str:
+        rows = self.db.all("SELECT id, title, status FROM tasks WHERE project_id=? AND origin!='stage' "
+                           "AND status NOT IN ('done', 'cancelled', 'backlog') ORDER BY id LIMIT ?", pid, n)
+        return "\n".join(f"- {ticket_key(r['id'])} {r['title']} ({r['status'].replace('_', ' ')})" for r in rows)
+
+    def _limit_decision(self, pid: int, which: str, used: int, limit: int) -> None:
+        """A project allowance ran out. Ask the CTO instead of stopping without a word."""
+        if self._attention_pending(pid):
+            return
+        p, more = self.project(pid), RAISE_BY[which]
+        open_tickets = self._open_tickets(pid)
+        self._approval(pid, "limit", "cto", f"{p['name']} used its {NAMES[which]} allowance ({used}/{limit})",
+                       f"{p['name']} used {used} of its {limit} {NAMES[which]}, so work stopped. Nothing is lost: the "
+                       "work so far is preserved. The allowance is a guard against a loop, so look at what is still "
+                       "open before you allow more."
+                       + (f"\n\nStill open:\n{open_tickets}" if open_tickets else "")
+                       + f"\n\nApprove to allow {more} more {NAMES[which]} and carry on. Send back to pause the "
+                       "project (you can cancel tickets you no longer need, then resume).",
+                       {"which": which, "used": used, "limit": limit, "stage": p["stage"]})
+
+    def _attention(self, pid: int, text: str) -> None:
+        """Work stopped for a reason a person has to deal with: say so, with the reason, instead of only logging it."""
+        if self._attention_pending(pid):
+            return
+        p = self.project(pid)
+        self._approval(pid, "attention", "cto", f"{p['name']} stopped and needs you",
+                       f"{text[:1500]}\n\nDeal with this (for example hire, cancel a ticket or change a setting), "
+                       "then approve to try again. Send back to pause the project.",
+                       {"error": text[:500], "stage": p["stage"]})
 
     def running(self, pid: int) -> bool:
         lock = self._locks.get(pid)
@@ -396,7 +467,7 @@ class Pipeline:
             self.write_reports(pid)
         except Exception as exc:
             from .engines import EngineUnavailable
-            if not isinstance(exc, EngineUnavailable):   # a pause is logged by advance(), not as an error
+            if not isinstance(exc, (EngineUnavailable, ProjectLimit)):   # logged by advance(), as a pause or a decision
                 self.db.log("error", f"{type(exc).__name__}: {exc}", pid)
             raise
         return self.project(pid)
@@ -534,7 +605,10 @@ class Pipeline:
                + "); milestones; risks.\n\nRequirements, UX design, architecture and build, QA and audits happen "
                "automatically. File department tickets only for other work, such as help docs for Support and terms "
                "and privacy for Legal" + (", and pricing and a launch plan for Marketing" if selling else
-                                          ". It is for internal use, so do not plan marketing or pricing work")
+                                          ". It is for internal use, so do not plan marketing or pricing work, and "
+                                          "file no legal, support or documentation tickets unless the assessment "
+                                          "found a specific need for them: for a small internal tool that is usually "
+                                          "none")
                + ". Set after_build for work that needs the finished product. Then call submit_department_plan.\n\n"
                f"Roles that can own tickets:\n{roles}")
         if p["feedback"]:
@@ -644,6 +718,43 @@ class Pipeline:
         self._approval(p["id"], "prd", "ceo", f"Requirements for {p['name']}", summary,
                        {"agent_ids": authors, "file": "docs/PRD.md"})
         self._stage(p["id"], "prd_approval", "")
+
+    @staticmethod
+    def _review_diff(ws: Workspace, base: str | None, limit: int = 14000) -> str:
+        """What this ticket changed, for the reviewers' prompt, so they need not explore the project to find out."""
+        if not base:
+            return ""
+        skip = ("--", ".", ":(exclude)*.lock", ":(exclude)package-lock.json", ":(exclude)docs/VERIFICATION.json")
+        try:
+            stat = ws.git("diff", "--no-renames", "--stat=100", base, "HEAD", *skip).strip()
+            diff = ws.git("diff", "--no-renames", "-U2", base, "HEAD", *skip)
+        except Exception:
+            return ""
+        if not diff.strip():
+            return ""
+        if len(diff) > limit:
+            diff = diff[:limit] + f"\n… [{len(diff) - limit} more characters of the diff; read the files for the rest]"
+        return f"The changes of this ticket (git diff from where the builder started):\n{stat}\n\n{diff}\n\n"
+
+    def _escalate(self, pid: int, task: dict) -> None:
+        self._approval(pid, "escalation", "cto",
+                       f"Task \"{task['title']}\" keeps failing review",
+                       f"Sent back {task['attempts']} time(s). Latest findings:\n{task['feedback']}\n\n"
+                       "Approve to accept the work as it stands. Reject with guidance to have it redone.",
+                       {"task_id": task["id"]})
+
+    def _escalate_orphans(self, pid: int) -> bool:
+        """A ticket can fail without its escalation ever reaching the CTO (work interrupted, or tickets failing side
+        by side). Send those now, instead of stopping on a ticket nobody is told about. True if any was sent."""
+        waiting = {json.loads(a["payload"] or "{}").get("task_id") for a in self.db.all(
+            "SELECT payload FROM approvals WHERE project_id=? AND kind='escalation' AND status='pending'", pid)}
+        orphans = [t for t in self.db.all("SELECT * FROM tasks WHERE project_id=? AND status='failed' "
+                                          "AND origin!='stage' ORDER BY id", pid) if t["id"] not in waiting]
+        for task in orphans:
+            self._escalate(pid, task)
+        if orphans or waiting:
+            self._stage(pid, "escalation")
+        return bool(orphans)
 
     def _builder_roles(self) -> list[dict]:
         ids = sorted({a["role"] for a in self.org.staff(kind="builder")})
@@ -756,14 +867,11 @@ class Pipeline:
                 failed = self._run_parallel(p, batch, ws)
             if failed:
                 for task in failed:
-                    task = self.db.one("SELECT * FROM tasks WHERE id=?", task["id"])
-                    self._approval(pid, "escalation", "cto",
-                                   f"Task \"{task['title']}\" keeps failing review",
-                                   f"Sent back {task['attempts']} time(s). Latest findings:\n{task['feedback']}\n\n"
-                                   "Approve to accept the work as it stands. Reject with guidance to have it redone.",
-                                   {"task_id": task["id"]})
+                    self._escalate(pid, self.db.one("SELECT * FROM tasks WHERE id=?", task["id"]))
                 self._stage(pid, "escalation")
                 return
+        if self._escalate_orphans(pid):
+            return
         stuck = self.db.all("SELECT key FROM tasks WHERE project_id=? AND origin!='stage' AND type!='question' "
                             "AND status NOT IN ('done', 'cancelled', 'backlog')", p["id"])
         if stuck:
@@ -1167,10 +1275,10 @@ class Pipeline:
         Review-only checkpoint resumes do not call this. Interrupted launches
         remain charged: they may already have consumed tokens or changed files.
         """
-        limit = (self.s.raw.get('pipeline') or {}).get('max_project_repairs',
-                                                      1 if self.small(pid) else 3)
-        if limit is not None and (type(limit) is not int or limit < 0):
-            raise PipelineError('pipeline.max_project_repairs must be a nonnegative integer or null.')
+        try:
+            limit = project_limit(self.db, self.s, pid, 'repairs')
+        except ValueError as exc:
+            raise PipelineError(str(exc)) from exc
         with self.db.lock:
             self.db.conn.execute('SAVEPOINT builder_reservation')
             try:
@@ -1183,8 +1291,7 @@ class Pipeline:
                 repair = task['builder_starts'] > 0 or task['attempts'] > 0 or task['type'] == 'bug'
                 used = self.db.one('SELECT repair_starts FROM projects WHERE id=?', pid)['repair_starts']
                 if repair and limit is not None and used >= limit:
-                    raise PipelineError(f'Project repair limit reached ({used}/{limit}). No builder was launched. '
-                                        'Review the preserved work before explicitly increasing pipeline.max_project_repairs.')
+                    raise ProjectLimit('repairs', used, limit)
                 self.db.run('UPDATE tasks SET builder_starts=builder_starts+1 WHERE id=?', tid)
                 if repair:
                     self.db.run('UPDATE projects SET repair_starts=repair_starts+1 WHERE id=?', pid)
@@ -1207,11 +1314,16 @@ class Pipeline:
                         + (f" (attempt {task['attempts'] + 1})" if task["attempts"] else ""), pid, actor=agent["name"])
             note(self.db, task["id"], agent["name"], "Started work" + (f" (attempt {task['attempts'] + 1})."
                                                                       if task["attempts"] else "."))
-            ask = (f"Project \"{p['name']}\". Read docs/PRD.md, docs/ARCHITECTURE.md and, if present, "
-                   "docs/DESIGN.md first.\n\n"
+            department = (self.db.one("SELECT d.name FROM roles r JOIN departments d ON d.id=r.department "
+                                      "WHERE r.id=?", agent["role"]) or {}).get("name")
+            reading = ("Read only the files this ticket names and the acceptance criteria in docs/PRD.md that it "
+                       "touches; do not read every document." if department in DOCUMENT_DEPARTMENTS else
+                       "Read docs/PRD.md and docs/ARCHITECTURE.md (and docs/DESIGN.md if present) first, only the parts "
+                       "this ticket needs.")
+            ask = (f"Project \"{p['name']}\". {reading}\n\n"
                    f"Your task [{task['key']}]: {task['title']}\n{task['description']}\n\n"
                    "Done means: the work is in the workspace, tests exist and pass where they apply, "
-                   "and nothing that worked before is broken.")
+                   "and nothing that worked before is broken.\n\n" + DOC_RULES)
             if task["feedback"]:
                 ask += f"\n\nYour previous attempt was sent back. Fix these findings:\n{task['feedback']}"
             comments = self.db.all("SELECT author, body FROM (SELECT * FROM ticket_comments WHERE task_id=? "
@@ -1236,7 +1348,9 @@ class Pipeline:
                     checkpoint = saved
             except (ValueError, TypeError):
                 pass
+            review_base = None
             if checkpoint:
+                review_base = checkpoint.get("review_base")
                 res = RunResult(text=checkpoint["text"], completed=checkpoint["completed"],
                                 route_id=checkpoint.get("route_id"))
                 self.db.log("work", f"Resuming review of [{task['key']}] without rebuilding unchanged work.", pid)
@@ -1268,13 +1382,14 @@ class Pipeline:
             self.db.run("UPDATE tasks SET result=? WHERE id=?", json.dumps({
                 "review_checkpoint": 1, "tree": ws.git("rev-parse", "HEAD^{tree}").strip(),
                 "text": res.text, "completed": res.completed, "route_id": res.route_id,
-                "review_paths": review_paths,
+                "review_paths": review_paths, "review_base": review_base,
                 "assignment": {k: task[k] for k in ("title", "description", "role", "feedback")}}), task["id"])
             self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
             note(self.db, task["id"], agent["name"], "Submitted for review.\n" + (res.text or "")[:1500])
             findings, approved, scores = [], res.completed, []
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
+            diff_text = self._review_diff(ws, review_base)
             checked = ""
             if self.s.review_checks and ws.resolve(CONTRACT).is_file():
                 report = self._host_checks(p, ws, record=False)
@@ -1298,8 +1413,9 @@ class Pipeline:
                     f"As {check_role['title']}, check task [{task['key']}] \"{task['title']}\" in project "
                     f"\"{p['name']}\", done by {agent['name']}.\n\nTask:\n{task['description']}\n\n"
                     f"{agent['name']}'s summary:\n{res.text}\n\nFiles changed (git status):\n{changed}\n\n"
+                    f"{diff_text}"
                     "Requirements are in docs/PRD.md and the design in docs/ARCHITECTURE.md. "
-                    "Finish by calling submit_review." + checked,
+                    "Finish by calling submit_review." + checked + "\n\n" + REVIEW_BUDGET,
                     ws, project_id=pid, meta={**meta, "author": agent["name"],
                                                "author_model": self.db.one('SELECT model FROM routing_decisions WHERE id=?',
                                                                            res.route_id)['model'] if res.route_id else agent['model']})
@@ -1436,7 +1552,7 @@ class Pipeline:
             if choice not in allowed:
                 raise PipelineError("Decide the idea with one of: build it for internal use (internal), build it to "
                                     "sell (commercial), park it (park), or drop it (drop).")
-        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget", "deploy", "strategy", "machine"):
+        if decision == "rejected" and not feedback and a["kind"] not in ("hr", "hire", "idea_decision", "budget", "deploy", "strategy", "machine", "limit", "attention"):
             raise PipelineError("Say what needs to change when you reject, so the team can act on it.")
         who, ok, pid = self.s.human(role), decision == "approved", a["project_id"]
         if autopilot:                       # decided on the CEO's or CTO's behalf, within the level they chose
@@ -1643,6 +1759,15 @@ class Pipeline:
                 self._stage(pid, "paused")
                 self.db.log("budget", f"{who} stopped work when the budget ran out. Set a new budget to resume.",
                             pid, actor=who)
+        elif kind in ("limit", "attention"):
+            if ok and kind == "limit":
+                new = raise_limit(self.db, pid, payload["which"], payload["used"])
+                self.db.log("limit", f"{who} allowed more {NAMES[payload['which']]}: the limit is now {new}.", pid, actor=who)
+            elif ok:
+                self.db.log("project", f"{who} dealt with the stop; trying again.", pid, actor=who)
+            else:
+                self._pause_now(pid)
+                self.db.log("project", f"{who} paused the project. Resume it from its page when ready.", pid, actor=who)
         elif kind == "hire":
             if ok:
                 hired = self.org.hire(payload["role"], by=who)

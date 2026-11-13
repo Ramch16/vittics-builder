@@ -7,3 +7,4 @@ __pycache__/
 .vittics/
 workspaces/
 /org.yaml
+vittics_builder/_build.py
