@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.27.0 — 2026-11-12
 From two pilots of tiny tools (a personal checklist used 12.7M tokens; 86% of them went on legal, support and
 documentation tickets, and the project then sat idle for two hours without saying why):
 - **A project that stops says so.** When a project reaches its repair or agent-run allowance, or stops for any
