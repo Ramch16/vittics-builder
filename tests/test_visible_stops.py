@@ -120,3 +120,29 @@ def test_the_ledger_separates_cached_from_fresh_input(co):
     assert (total["input_tokens"], total["cached_tokens"]) == (1_010_000, 900_000)
     [row] = [r for r in summary(co.db)["projects"] if r["id"] == p["id"]]
     assert row["cached_tokens"] == 900_000 and row["calls"] == 2
+
+
+def test_alive_tells_a_running_process_from_a_finished_one_and_never_signals_it():
+    from vittics_builder.runs import _alive
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        assert _alive(os.getpid()) and _alive(child.pid)
+        assert child.poll() is None                      # asking did not harm it (os.kill(pid, 0) ends it on Windows)
+    finally:
+        child.kill()
+        child.wait()
+    assert not _alive(child.pid)
+
+
+def test_the_reaper_leaves_runs_of_another_live_process_alone(co):
+    agent = co.org.agent("Ram")
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])    # e.g. the desktop app's backend
+    try:
+        run = co.runs.start(agent, None, None, "chat", "Hi")
+        co.db.run("UPDATE runs SET owner_pid=? WHERE id=?", other.pid, run)
+        assert co.runs.reap() == 0
+        assert co.db.one("SELECT status FROM runs WHERE id=?", run)["status"] == "running"
+        assert other.poll() is None                      # and the process itself is still running
+    finally:
+        other.kill()
+        other.wait()

@@ -17,6 +17,7 @@ from .memory import Memory
 from .failover import Failover
 from .machine import Machine
 from .nodes import Nodes
+from .platforms import rmtree_force
 from .preview import Previews
 from .vault import Vault
 from .ai import AI
@@ -153,7 +154,7 @@ class Company:
         root = self.s.workspaces.resolve()
         for folder in folders:                  # only ever inside this company's workspaces folder
             if folder.exists() and root in folder.resolve().parents:
-                shutil.rmtree(folder, ignore_errors=True)
+                rmtree_force(folder)
         self.db.log("project", f"{by} removed the project {project['name']} permanently.", None, actor=by)
         return {"name": project["name"], "removed": {t: n for t, n in removed.items() if n}}
 

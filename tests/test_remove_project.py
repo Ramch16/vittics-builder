@@ -125,3 +125,35 @@ def test_the_dashboard_reports_the_build(co):
     state = TestClient(create_app(co, {"ceo": "ceo-token", "cto": "cto-token"})).get(
         "/api/state", headers={"X-Token": "ceo-token"}).json()
     assert state["build"].startswith(state["version"])
+
+
+def test_a_source_checkouts_commit_is_read_from_git_without_running_git(tmp_path, monkeypatch):
+    import subprocess as sp
+
+    def no_git(*args, **kwargs):
+        raise AssertionError("git must not be run to build the label")
+    monkeypatch.setattr(sp, "run", no_git)
+    git = tmp_path / ".git"
+    (git / "refs" / "heads").mkdir(parents=True)
+    (git / "HEAD").write_text("ref: refs/heads/main\n")
+    (git / "refs" / "heads" / "main").write_text("0123456789abcdef0123456789abcdef01234567\n")
+    assert buildinfo.git_commit(tmp_path) == "0123456"
+    (git / "refs" / "heads" / "main").unlink()                              # a packed ref
+    (git / "packed-refs").write_text("# pack-refs\nfedcba9876543210fedcba9876543210fedcba98 refs/heads/main\n")
+    assert buildinfo.git_commit(tmp_path) == "fedcba9"
+    (git / "HEAD").write_text("89abcdef0123456789abcdef0123456789abcdef\n")  # detached
+    assert buildinfo.git_commit(tmp_path) == "89abcde"
+    assert buildinfo.git_commit(tmp_path / "nowhere") == ""
+
+
+def test_folders_with_read_only_files_are_removed(tmp_path):
+    import os
+    import stat
+    from vittics_builder.platforms import rmtree_force
+    folder = tmp_path / "workspace" / ".git" / "objects"
+    folder.mkdir(parents=True)
+    locked = folder / "pack"
+    locked.write_text("x")
+    os.chmod(locked, stat.S_IREAD)                                          # git makes its objects read-only
+    rmtree_force(tmp_path / "workspace")
+    assert not (tmp_path / "workspace").exists()

@@ -96,3 +96,21 @@ def keep_awake(enabled: bool = True) -> str:
             return "SetThreadExecutionState"
     return ""
 
+
+def rmtree_force(path) -> None:
+    """Remove a folder tree, read-only files included: git makes its object files read-only, and Windows refuses to
+    delete those until they are made writable."""
+    import stat
+    import sys
+
+    def retry(function, target, _error) -> None:
+        try:
+            os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+            function(target)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=retry)
+    else:
+        shutil.rmtree(path, onerror=retry)
+

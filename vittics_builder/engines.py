@@ -60,6 +60,7 @@ BUILTIN_ENGINES: dict[str, dict] = {
         "tools": {"read": ["Read", "Glob", "Grep"], "write": ["Edit", "Write"], "run": ["Bash"]},
         "prompt": "stdin",
         "output": "claude-json",
+        "sign_in": "claude auth login",             # what to run when its login has expired
         "subscription": True,       # drop ANTHROPIC_API_KEY so the CLI bills its own login, not the API key
         "env_keep": ["CLAUDE_CODE_OAUTH_TOKEN"],     # a subscription login from `claude setup-token`
         # A run ends when the agent replies, so a background command's result would never reach it.
@@ -251,7 +252,7 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
     failure_text = out["text"] + "\n" + (proc.stderr or "")[-2000:]
     if out["is_error"] and (m := SIGNED_OUT.search(failure_text)):
         start = failure_text.rfind("\n", 0, m.start()) + 1
-        command = SIGN_IN.get(Path(str(engine["command"][0])).name, "the engine's sign-in command")
+        command = engine.get("sign_in") or SIGN_IN.get(Path(str(engine["command"][0])).name, "the engine's sign-in command")
         raise EngineUnavailable(f"{failure_text[start:].strip().splitlines()[0][:200]} Sign in again by running "
                                 f"`{command}` in a terminal, then resume.")
     if out["is_error"] and (m := UNAVAILABLE.search(failure_text)):

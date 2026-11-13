@@ -269,21 +269,17 @@ def test_missing_cli_review_requires_explicit_structured_verdict(cli, monkeypatc
 def test_an_expired_login_pauses_work_with_the_fix_instead_of_blaming_the_agent(tmp_path):
     import sys
     import pytest
-    from vittics_builder.engines import run_cli, EngineUnavailable
-    script = tmp_path / "claude"
+    from vittics_builder.engines import BUILTIN_ENGINES, run_cli, EngineUnavailable
+    script = tmp_path / "claude.py"
     script.write_text('import json, sys\nprint(json.dumps({"is_error": True, "result": '
                       '"Failed to authenticate: OAuth session expired and could not be refreshed", "usage": {}}))\nsys.exit(1)\n')
-    engine = {"command": [sys.executable, str(script)], "output": "claude-json", "prompt": "stdin"}
-    with pytest.raises(EngineUnavailable) as stop:
+    engine = {"command": [sys.executable, str(script)], "output": "claude-json", "prompt": "stdin",
+              "sign_in": BUILTIN_ENGINES["claude-code"]["sign_in"]}
+    with pytest.raises(EngineUnavailable, match="claude auth login") as stop:
         run_cli(engine, system="", prompt="review", cwd=str(tmp_path), model="", write=False, run=False, timeout=10)
     assert "OAuth session expired" in str(stop.value) and "then resume" in str(stop.value)
-    engine["command"][0] = str(tmp_path / "claude")           # named like the real tool: the exact command is given
-    claude = tmp_path / "bin"
-    claude.mkdir()
-    (claude / "claude").write_text(script.read_text().replace("import json, sys", "#!" + sys.executable + "\nimport json, sys", 1))
-    (claude / "claude").chmod(0o755)
-    engine["command"] = [str(claude / "claude")]
-    with pytest.raises(EngineUnavailable, match="claude auth login"):
+    engine.pop("sign_in")                                       # an engine with no hint still says to sign in again
+    with pytest.raises(EngineUnavailable, match="Sign in again"):
         run_cli(engine, system="", prompt="review", cwd=str(tmp_path), model="", write=False, run=False, timeout=10)
 
 
