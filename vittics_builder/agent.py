@@ -294,8 +294,10 @@ class AgentRuntime:
                     self.db.log("machine", f"{exc}; {agent['name']} works on this computer meanwhile.",
                                 project_id, actor=agent["name"])
             if out is None:
+                checker = role["kind"] in ("reviewer", "qa", "auditor")
                 out = run_cli(engine, system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
-                              write=can_write, run=can_run, timeout=self.s.cli_timeout)
+                              write=can_write, run=can_run, timeout=self.s.cli_timeout,
+                              max_turns=self.s.cli_review_turns if checker else self.s.cli_max_turns)
         except EngineUnavailable as exc:      # a usage limit is nobody's failure: stop, don't score or rework
             raise EngineUnavailable(f"{engine_name} is unavailable: {exc}") from exc
         except EngineError as exc:

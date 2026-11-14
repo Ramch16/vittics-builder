@@ -21,6 +21,8 @@ llm:
   max_turns: 40                  # tool-use turns per agent run
   max_tokens: 8000
   cli_timeout: 1800              # seconds one agent run through a coding CLI may take
+  cli_max_turns: 80              # tool turns one builder run through Claude Code may take (0 turns the cap off)
+  cli_review_turns: 30           # the same for reviewers, QA and auditors
   # USD per million tokens. Built in: Haiku 4.5, Sonnet 5.5 and Opus 5.5 list prices (September 2026).
   # prices:
   #   my-model: { input: 2.00, output: 10.00 }

@@ -60,6 +60,7 @@ BUILTIN_ENGINES: dict[str, dict] = {
         "tools": {"read": ["Read", "Glob", "Grep"], "write": ["Edit", "Write"], "run": ["Bash"]},
         "prompt": "stdin",
         "output": "claude-json",
+        "turn_args": ["--max-turns", "{turns}"],     # a run that cannot finish in this many turns is stopped, not left to spend
         "sign_in": "claude auth login",             # what to run when its login has expired
         "subscription": True,       # drop ANTHROPIC_API_KEY so the CLI bills its own login, not the API key
         "env_keep": ["CLAUDE_CODE_OAUTH_TOKEN"],     # a subscription login from `claude setup-token`
@@ -194,7 +195,7 @@ def engine_env(engine: dict, base=None) -> dict[str, str]:
 
 
 def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: str, write: bool, run: bool,
-            timeout: int) -> dict:
+            timeout: int, max_turns: int | None = None) -> dict:
     """Run one CLI turn. Reading is always allowed; editing files and running commands only when granted."""
     if engine.get("system") == "prompt":    # no system-prompt flag: the role and rules lead the prompt
         prompt = f"{system}\n\n---\n\n{prompt}"
@@ -209,6 +210,8 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
         argv += list(engine["level_args"].get("write" if write else "read", []))
     if model and engine.get("model_args"):
         argv += [put(part) for part in engine["model_args"]]
+    if max_turns and engine.get("turn_args"):
+        argv += [part.replace("{turns}", str(int(max_turns))) for part in engine["turn_args"]]
     tools = engine.get("tools") or {}
     allowed = list(tools.get("read", [])) + (list(tools.get("write", [])) if write else []) \
         + (list(tools.get("run", [])) if run else [])

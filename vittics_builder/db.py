@@ -413,7 +413,9 @@ class DB:
                              ("size", "TEXT NOT NULL DEFAULT 'standard'"),
                              ("repair_starts", "INTEGER NOT NULL DEFAULT 0"),
                              # a limit the CTO raised for this project (NULL: the company default applies)
-                             ("repair_cap", "INTEGER"), ("run_cap", "INTEGER")):
+                             ("repair_cap", "INTEGER"), ("run_cap", "INTEGER"),
+                             # 0.27.1: unverified items the CTO accepted for one exact source (JSON), see pipeline.accept_unverified
+                             ("waiver", "TEXT")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
                 self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.

@@ -57,6 +57,11 @@ def summary(db: DB) -> dict:
                       "COALESCE(SUM(u.input_tokens), 0) AS input_tokens, COALESCE(SUM(u.cached_tokens), 0) AS cached_tokens, "
                       "COALESCE(SUM(u.output_tokens), 0) AS output_tokens, COUNT(u.id) AS calls FROM projects p "
                       "LEFT JOIN usage u ON u.project_id=p.id GROUP BY p.id ORDER BY p.id DESC")
+    for row in projects:
+        row["by_purpose"] = db.all(
+            "SELECT CASE WHEN instr(purpose, ' via ') > 0 THEN substr(purpose, 1, instr(purpose, ' via ') - 1) ELSE purpose END AS purpose, "
+            "COUNT(*) AS calls, SUM(input_tokens) AS input_tokens, SUM(cached_tokens) AS cached_tokens, "
+            "SUM(output_tokens) AS output_tokens FROM usage WHERE project_id=? GROUP BY 1 ORDER BY input_tokens DESC", row["id"])
     departments = db.all("SELECT d.name AS department, COALESCE(SUM(u.cost), 0) AS spent FROM usage u "
                          "JOIN agents a ON a.id=u.agent_id JOIN roles r ON r.id=a.role "
                          "JOIN departments d ON d.id=r.department GROUP BY d.id ORDER BY spent DESC")

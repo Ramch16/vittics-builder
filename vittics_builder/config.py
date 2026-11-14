@@ -50,6 +50,8 @@ class Settings:
     endpoints: dict = field(default_factory=dict)
     skills: list = field(default_factory=lambda: ["karpathy-guidelines"])
     cli_timeout: int = 1800
+    cli_max_turns: int = 80        # tool turns one builder run through a coding CLI may take (0: no cap)
+    cli_review_turns: int = 30     # the same for reviewers, QA and auditors, who should only read and check
     hire_when_waiting: int = 3
     max_per_role: int = 4
     prices: dict = field(default_factory=dict)
@@ -120,6 +122,8 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     from .engines import BUILTIN_ENGINES
     s.engines = {**BUILTIN_ENGINES, **(raw.get("engines") or {})}
     s.cli_timeout = int(llm.get("cli_timeout", s.cli_timeout))
+    s.cli_max_turns = int(llm.get("cli_max_turns", s.cli_max_turns))
+    s.cli_review_turns = int(llm.get("cli_review_turns", s.cli_review_turns))
     from .llm import ENDPOINTS
     s.endpoints = {**ENDPOINTS, **(raw.get("endpoints") or {})}
     if "skills" in raw:
