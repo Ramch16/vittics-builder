@@ -140,15 +140,20 @@ class Learning:
         return self.db.all('SELECT * FROM learned_strategies ORDER BY id DESC LIMIT 50')
 
     # ---- reviewer calibration --------------------------------------------
-    def verdict(self, pid, task_id, reviewer_id, route_id, verdict, score):
+    def verdict(self, pid, task_id, reviewer_id, route_id, verdict, score, unverifiable=False):
         self.db.run("UPDATE review_verdicts SET settled_by='superseded', settled_at=? WHERE task_id=? AND reviewer_id=? "
                     "AND settled_at IS NULL", now(), task_id, reviewer_id)     # only the latest round is judged
-        self.db.run('INSERT INTO review_verdicts(project_id, task_id, reviewer_id, route_id, verdict, score, created_at) '
-                    'VALUES (?,?,?,?,?,?,?)', pid, task_id, reviewer_id, route_id, verdict, score, now())
+        self.db.run('INSERT INTO review_verdicts(project_id, task_id, reviewer_id, route_id, verdict, score, created_at, unverifiable) '
+                    'VALUES (?,?,?,?,?,?,?,?)', pid, task_id, reviewer_id, route_id, verdict, score, now(), int(bool(unverifiable)))
 
     def settle_task(self, task_id, accepted, by):
         """The CTO decided an escalated ticket: blocking reviewers were right if it was sent back."""
         rows = self.db.all('SELECT * FROM review_verdicts WHERE task_id=? AND settled_at IS NULL', task_id)
+        # A reviewer who blocked only for evidence a person has to give was not wrong when the CTO accepted anyway.
+        for v in [r for r in rows if r['unverifiable'] and r['verdict'] != 'approve']:
+            self.db.run("UPDATE review_verdicts SET settled_by='not judged: only a person could supply the evidence', "
+                        "settled_at=? WHERE id=?", now(), v['id'])
+        rows = [r for r in rows if not (r['unverifiable'] and r['verdict'] != 'approve')]
         self._settle(rows, lambda v: (v['verdict'] == 'approve') == accepted,
                      f"{by} {'accepted' if accepted else 'sent back'} the ticket", by, shared=False)
 

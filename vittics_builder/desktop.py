@@ -66,20 +66,38 @@ def free_port() -> int:
 
 
 def exit_with_parent(on_exit=None) -> None:
-    """The app holds our stdin open; when it quits (even if killed) stdin closes, and so do we."""
+    """The app holds our stdin open; when it quits (even if killed) stdin closes, and so do we. A backend left with no
+    parent at all (the app's launcher was killed without closing stdin) leaves too. Agents it started leave with it:
+    a closed window must not leave an agent working, and spending, on its own."""
+    def leave() -> None:
+        if on_exit:
+            try:
+                on_exit()
+            except Exception:
+                pass
+        try:
+            from .platforms import kill_descendants
+            kill_descendants()
+        except Exception:
+            pass
+        os._exit(0)
+
     def watch() -> None:
         try:
             while sys.stdin.buffer.read(1024):
                 pass
         except (OSError, ValueError):
             pass
-        if on_exit:
-            try:
-                on_exit()
-            except Exception:
-                pass
-        os._exit(0)
+        leave()
+
+    def orphaned() -> None:
+        parent = os.getppid()
+        while True:
+            time.sleep(5)
+            if os.getppid() != parent or (os.name != "nt" and os.getppid() == 1):
+                leave()
     threading.Thread(target=watch, name="vittics-parent-watch", daemon=True).start()
+    threading.Thread(target=orphaned, name="vittics-orphan-watch", daemon=True).start()
 
 
 def main(home: str | None = None, port: int | None = None) -> None:

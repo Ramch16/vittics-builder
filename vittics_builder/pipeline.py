@@ -16,6 +16,7 @@ import json
 import re
 import subprocess
 import threading
+from datetime import datetime, timedelta
 import time
 from pathlib import Path
 
@@ -58,6 +59,9 @@ SIZES = ("small", "standard")
 # Departments whose tickets are about documents, not code: they need the ticket's files, not the whole design.
 DOCUMENT_DEPARTMENTS = ("Customer Support", "Marketing", "Product", "Legal and Compliance")
 # Every document is read again by every later agent, on every turn: keep them proportionate and honest.
+SMALL_BUILD = ("This is a small project, so work economically: write whole files in one step, run the checks once, "
+               "do not re-read files you just wrote, and keep any check scripts short (a few focused checks, not an "
+               "exhaustive harness). Every extra step re-reads the whole conversation, which is what costs tokens.")
 DOC_RULES = ("Documents cost tokens each time an agent reads them again: create a new document only when this ticket "
              "asks for one, keep it under about 4 KB, and link to other documents instead of restating them. Quote "
              "counts, versions and results only from check output you were given or files you read; never estimate or "
@@ -110,6 +114,9 @@ class Pipeline:
         self.releasing: set[int] = set()        # projects in their release checks: agents' new tickets wait in backlog
         self._pause_requested: set[int] = set() # projects to pause at the next safe point
         self._inconclusive: dict[int, list[str]] = {}   # audits that gave no verdict, shown at the release review
+        self.auto_resume = None                 # set by the dashboard server: starts a project's work again
+        self._auto_tries: dict[int, int] = {}
+        self._auto_timers: dict[int, threading.Timer] = {}
         self.reporter = None                    # writes a pending status report (set by Company)
         self.production = None                  # deploys signed-off releases (set by Company)
         self.machine = None                     # what this computer has and needs (set by Company)
@@ -313,7 +320,9 @@ class Pipeline:
         try:
             if self._attention_pending(pid):         # waiting for the CTO: do not retry or log the same stop again
                 return self.project(pid)
-            return self._advance(pid)
+            result = self._advance(pid)
+            self._auto_tries.pop(pid, None)       # it got somewhere: the next stop starts counting again
+            return result
         except EngineUnavailable as exc:
             self.db.run("UPDATE tasks SET status='todo' WHERE project_id=? AND status IN ('in_progress','in_review') "
                         "AND origin!='stage'", pid)
@@ -322,8 +331,10 @@ class Pipeline:
                 self.db.log('paused', str(exc), pid)
                 self._limit_decision(pid, 'runs', exc.used, exc.limit)
                 raise PipelineError(str(exc)) from exc
+            again = self._schedule_resume(pid, str(exc))
             self.db.log("paused", f"Work paused: {exc}. Nothing was counted against the team. "
-                        f"Resume once it is back (Resume work, or `vittics-builder run {pid}`).", pid)
+                        + (f"Vittics will try again automatically at {again} while it is open; " if again else "")
+                        + f"or use Resume work (or `vittics-builder run {pid}`).", pid)
             raise PipelineError(f"Work paused: {exc}. Nothing was counted against the team; resume once it is back "
                                 f"with Resume work or `vittics-builder run {pid}`.") from exc
         except ProjectLimit as exc:
@@ -335,6 +346,30 @@ class Pipeline:
         finally:
             self._cycle_limits.pop(pid, None)
             lock.release()
+
+    def _schedule_resume(self, pid: int, message: str) -> str:
+        """After a usage or rate limit, try again when the engine says it is back (or in half an hour), up to four
+        times in a row. Only while the app is open. A login that has expired needs a person, so it is not retried.
+        Returns the time it will try, or '' when it will not."""
+        from .failover import reset_after
+        if not self.auto_resume or re.search(r"sign in|signed out|log in|login|expired|authenticat", message, re.I):
+            return ""
+        if self._auto_tries.get(pid, 0) >= 4 or pid in self._auto_timers:
+            return ""
+        wait = reset_after(message, 30) + 60
+
+        def fire() -> None:
+            self._auto_timers.pop(pid, None)
+            self._auto_tries[pid] = self._auto_tries.get(pid, 0) + 1
+            if self.project(pid)["stage"] in ("done", "live", "dropped", "parked", "paused"):
+                return
+            self.db.log("work", "The engine should be back: trying again automatically.", pid)
+            self.auto_resume(pid)
+        timer = threading.Timer(wait, fire)
+        timer.daemon = True
+        self._auto_timers[pid] = timer
+        timer.start()
+        return (datetime.now() + timedelta(seconds=wait)).strftime("%H:%M")
 
     # ---- stops that need a person --------------------------------------------
     def _attention_pending(self, pid: int) -> bool:
@@ -1370,7 +1405,8 @@ class Pipeline:
             ask = (f"Project \"{p['name']}\". {reading}\n\n"
                    f"Your task [{task['key']}]: {task['title']}\n{task['description']}\n\n"
                    "Done means: the work is in the workspace, tests exist and pass where they apply, "
-                   "and nothing that worked before is broken.\n\n" + DOC_RULES)
+                   "and nothing that worked before is broken.\n\n" + DOC_RULES
+                   + ("\n\n" + SMALL_BUILD if self.small(pid) else ""))
             if task["feedback"]:
                 ask += f"\n\nYour previous attempt was sent back. Fix these findings:\n{task['feedback']}"
             comments = self.db.all("SELECT author, body FROM (SELECT * FROM ticket_comments WHERE task_id=? "
@@ -1478,7 +1514,8 @@ class Pipeline:
                 rv = check.review
                 scores.append(rv["score"])
                 if self.runtime.learning:
-                    self.runtime.learning.verdict(pid, task["id"], checker["id"], check.route_id, rv["verdict"], rv["score"])
+                    self.runtime.learning.verdict(pid, task["id"], checker["id"], check.route_id, rv["verdict"], rv["score"],
+                                                  unverifiable=rv.get("blocker_type") == "verification")
                 self.perf.record(agent["id"], rv["score"], source=source, reviewer=checker["name"], notes=rv["notes"],
                                  task_id=task["id"], project_id=pid)
                 if rv["verdict"] != "approve":

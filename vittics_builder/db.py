@@ -418,6 +418,9 @@ class DB:
                              ("waiver", "TEXT")):
             if column not in have:                # 0.7 ideas, 0.8 budgets and versions
                 self.conn.execute(f"ALTER TABLE projects ADD COLUMN {column} {decl}")
+        # 0.27.2: a verdict that only asked for evidence a person must give is not judged right or wrong by the CTO's call
+        if "unverifiable" not in {r["name"] for r in self.conn.execute("PRAGMA table_info(review_verdicts)")}:
+            self.conn.execute("ALTER TABLE review_verdicts ADD COLUMN unverifiable INTEGER NOT NULL DEFAULT 0")
         # Companies created before 0.2 limited role kinds in the table itself. Lift that.
         sql = self.conn.execute("SELECT sql FROM sqlite_master WHERE name='roles'").fetchone()["sql"]
         if "CHECK (kind IN" not in sql:

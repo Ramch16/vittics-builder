@@ -114,3 +114,64 @@ def rmtree_force(path) -> None:
     else:
         shutil.rmtree(path, onerror=retry)
 
+
+
+def pid_alive(pid: int | None) -> bool:
+    """Is this process still running? Never signals it: on Windows os.kill(pid, 0) terminates the process."""
+    if not pid:
+        return False
+    if os.name == "nt":
+        import ctypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel32.OpenProcess(0x1000, 0, int(pid))              # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() == 5                        # access denied: it exists, it is not ours
+        try:
+            code = ctypes.c_ulong()
+            return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                              # it exists; it just is not ours
+    except OSError:
+        return False
+    return True
+
+
+def kill_descendants() -> int:
+    """Stop every process this one started and has not reaped (agents' CLIs, previews). Used as the app quits, so a
+    closed window does not leave an agent working on its own. Returns how many were stopped."""
+    import signal
+    import subprocess
+    me = os.getpid()
+    if os.name == "nt":                          # ends this process too: only call it as the app is exiting
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(me)], capture_output=True)
+        return 0
+    try:
+        table = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    children: dict[int, list[int]] = {}
+    for line in table.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            children.setdefault(int(parts[1]), []).append(int(parts[0]))
+    found, queue = [], list(children.get(me, []))
+    while queue:
+        pid = queue.pop()
+        found.append(pid)
+        queue.extend(children.get(pid, []))
+    for pid in found:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    return len(found)

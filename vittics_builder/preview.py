@@ -41,20 +41,8 @@ def alive(pid: int | None) -> bool:
         return False
     if pid in _STARTED:
         return _STARTED[pid].poll() is None
-    if WINDOWS:                                   # os.kill(pid, 0) would send Ctrl-C on Windows
-        import ctypes
-        handle = ctypes.windll.kernel32.OpenProcess(0x00100000, False, pid)        # SYNCHRONIZE
-        if not handle:
-            return False
-        try:
-            return ctypes.windll.kernel32.WaitForSingleObject(handle, 0) == 0x102  # WAIT_TIMEOUT: still running
-        finally:
-            ctypes.windll.kernel32.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-        return True
-    except (OSError, ValueError):
-        return False
+    from .platforms import pid_alive
+    return pid_alive(pid)
 
 
 class Previews:
