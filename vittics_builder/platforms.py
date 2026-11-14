@@ -148,15 +148,17 @@ def pid_alive(pid: int | None) -> bool:
 
 def kill_descendants() -> int:
     """Stop every process this one started and has not reaped (agents' CLIs, previews). Used as the app quits, so a
-    closed window does not leave an agent working on its own. Returns how many were stopped."""
+    closed window does not leave an agent working on its own. Returns how many were stopped. Never stops this process."""
     import signal
     import subprocess
     me = os.getpid()
-    if os.name == "nt":                          # ends this process too: only call it as the app is exiting
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(me)], capture_output=True)
-        return 0
     try:
-        table = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=10).stdout
+        if os.name == "nt":
+            table = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                    "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId,$_.ParentProcessId }"],
+                                   capture_output=True, text=True, timeout=30).stdout
+        else:
+            table = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=10).stdout
     except (OSError, subprocess.SubprocessError):
         return 0
     children: dict[int, list[int]] = {}
@@ -167,11 +169,15 @@ def kill_descendants() -> int:
     found, queue = [], list(children.get(me, []))
     while queue:
         pid = queue.pop()
-        found.append(pid)
-        queue.extend(children.get(pid, []))
+        if pid != me and pid not in found:
+            found.append(pid)
+            queue.extend(children.get(pid, []))
     for pid in found:
         try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (OSError, subprocess.SubprocessError):
             pass
     return len(found)

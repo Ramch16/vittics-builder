@@ -26,7 +26,6 @@ def test_pid_alive_is_shared_and_never_harms_the_process():
     assert not pid_alive(child.pid)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="kill_descendants ends the whole process tree on Windows, this one included")
 def test_quitting_stops_the_agents_the_app_started():
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     grandchild_parent = subprocess.Popen([sys.executable, "-c",
