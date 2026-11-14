@@ -840,7 +840,7 @@ function decisionCard(a, me) {
     ${long ? `<button class="quiet" style="padding:0" data-expand-toggle="${a.id}">${open ? "Show less" : "Read more"}</button>` : ""}
     ${["release", "signoff"].includes(a.kind) && a.project_id ? `<button class="quiet" style="padding:0;margin-left:.8rem" data-review="${a.project_id}">Open product review</button>` : ""}
     ${a.kind === "task_review" ? `<button class="quiet" style="padding:0;margin-left:.8rem" data-changes="${a.project_id}">See the changes</button>` : ""}
-    ${mine ? `<textarea data-draft="${a.id}" style="margin-top:.6rem" rows="2" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : ["hire", "budget", "hr", "strategy", "deploy"].includes(a.kind) ? "Note (optional)" : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
+    ${mine ? `<textarea data-draft="${a.id}" style="margin-top:.6rem" rows="2" placeholder="${a.kind === "idea_decision" ? "Your reasons (optional)" : ["hire", "budget", "hr", "strategy", "deploy"].includes(a.kind) ? "Note (optional)" : /^Human verification required/.test(a.title) ? "Your reason. Needed to accept without the human checks, and kept on the release record." : "What should change? Required to send back."}">${esc(drafts[a.id] || "")}</textarea>
     <div class="actions" style="margin-top:.5rem">
       ${a.kind === "idea_decision" ? `
       <button class="primary" data-decide="approved" data-choice="internal" data-id="${a.id}">Build for internal use</button>
@@ -849,6 +849,7 @@ function decisionCard(a, me) {
       <button data-decide="rejected" data-choice="drop" data-id="${a.id}">Drop</button>` : `
       ${a.kind === "release_blocked" ? `
         <span class="muted">Release stays blocked until verification passes.</span>
+        ${/^Human verification required/.test(a.title) ? `<button class="primary" data-decide="approved" data-choice="accept" data-id="${a.id}" title="Needs a reason in the box">Accept without human checks</button>` : ""}
         <button data-decide="rejected" data-choice="wait" data-id="${a.id}">Wait for human verification</button>
         <button data-decide="rejected" data-choice="retry" data-id="${a.id}">Retry verification</button>
         <button data-decide="rejected" data-choice="repair" data-id="${a.id}">Request code repair</button>` : `
@@ -1235,7 +1236,7 @@ function renderCosts() {
       <div class="muted money">${(c.total.input_tokens / 1e6).toFixed(2)}M tokens in · ${(c.total.output_tokens / 1e6).toFixed(2)}M out${c.outside_projects ? ` · ${usd(c.outside_projects)} outside projects` : ""}</div>
       ${c.total.cached_tokens ? `<div class="muted money" title="Claude Code re-reads the conversation so far on every turn; those tokens come from its cache and are counted here.">${Math.round(100 * c.total.cached_tokens / Math.max(c.total.input_tokens, 1))}% of the input was re-read from cache (${(c.total.cached_tokens / 1e6).toFixed(2)}M); fresh input ${((c.total.input_tokens - c.total.cached_tokens) / 1e6).toFixed(2)}M</div>` : ""}
       ${c.unpriced_models.length ? `<p class="muted" style="color:var(--warn)">No price for ${esc(c.unpriced_models.join(", "))}; set llm.prices in org.yaml.</p>` : ""}</div>
-    <div class="card"><h3>By project</h3>${c.projects.length ? `<table>${c.projects.map(p => `<tr><td>${esc(p.name)}</td><td class="money" style="text-align:right">${usd(p.spent)}${p.budget ? ` / ${usd(p.budget)}` : ""}<div class="muted">${p.calls === 1 ? "1 call" : (p.calls || 0) + " calls"} · ${((p.input_tokens || 0) / 1e6).toFixed(1)}M in${p.cached_tokens ? ` (${Math.round(100 * p.cached_tokens / Math.max(p.input_tokens, 1))}% cached)` : ""}</div></td></tr>`).join("")}</table>` : `<p class="muted">No projects.</p>`}</div>
+    <div class="card"><h3>By project</h3>${c.projects.length ? `<table>${c.projects.map(p => `<tr><td>${esc(p.name)}${(p.by_purpose || []).length ? `<div class="muted" title="Input tokens by kind of work">${p.by_purpose.slice(0, 5).map(w => `${esc(w.purpose || "other")} ${((w.input_tokens || 0) / 1e6).toFixed(1)}M (${w.calls})`).join(" · ")}</div>` : ""}</td><td class="money" style="text-align:right">${usd(p.spent)}${p.budget ? ` / ${usd(p.budget)}` : ""}<div class="muted">${p.calls === 1 ? "1 call" : (p.calls || 0) + " calls"} · ${((p.input_tokens || 0) / 1e6).toFixed(1)}M in${p.cached_tokens ? ` (${Math.round(100 * p.cached_tokens / Math.max(p.input_tokens, 1))}% cached)` : ""}</div></td></tr>`).join("")}</table>` : `<p class="muted">No projects.</p>`}</div>
     <div class="card"><h3>By department</h3>${rows(c.departments, "department")}</div>
     <div class="card"><h3>Top agents</h3>${rows(c.agents, "name")}</div></div>
     <p class="muted">Estimated from Anthropic list prices; your Anthropic bill is the source of truth.</p>`;

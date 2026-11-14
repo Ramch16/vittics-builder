@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.27.1 — 2026-11-14
+From the first pilot rebuilt on 0.27.0 (a personal checklist): its release QA looped, blocked each time for checks only
+a person can do (real keys, 200% zoom, screen reader), and the project used 17.4M input tokens, more than before.
+- **Accept without human checks.** When the only thing blocking a release is a check a person has to do, the CTO
+  can accept it with a reason. The reason goes on the release record, QA is not repeated for that exact version, and
+  the acceptance lapses if the product changes. Failed checks can never be accepted.
+- **Retry no longer loops.** Retry verification on a product that has not changed since the last check now says so
+  instead of running QA again for the same result.
+- **Small projects skip the market and legal opinions** (a feasibility check remains).
+- **Turn caps for Claude Code runs:** builders 80 turns, reviewers, QA and auditors 30 (`llm.cli_max_turns`,
+  `llm.cli_review_turns`; 0 turns the cap off).
+- **The release summary flags a project that wrote far more than it built** (documents against lines of code).
+- **Costs shows each project's input tokens by kind of work** (build, review, QA and so on), so the cost of a
+  project can be measured rather than estimated.
+
+Not done yet: agents still start from scratch on every run (no session resume), and the 0.27.0 token saving
+is still unmeasured on a clean run.
+
 ## 0.27.0 — 2026-11-12
 From two pilots of tiny tools (a personal checklist used 12.7M tokens; 86% of them went on legal, support and
 documentation tickets, and the project then sat idle for two hours without saying why):

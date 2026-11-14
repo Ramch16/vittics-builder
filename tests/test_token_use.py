@@ -156,3 +156,53 @@ def test_building_with_auto_skips_the_idea_stage_only_for_small_tools(tmp_path):
     assert not co.db.one("SELECT 1 FROM events WHERE project_id=? AND message LIKE 'New idea:%'", small["id"])
     assert co.pipeline.project(standard["id"])["size"] == "standard"
     assert co.db.one("SELECT 1 FROM events WHERE project_id=? AND message LIKE 'New idea:%'", standard["id"])
+
+
+def test_a_small_project_asks_only_for_a_feasibility_opinion(tmp_path):
+    co = Company(tmp_path, provider=MockProvider(), create=True)
+    small = co.pipeline.create_project("Tiny", "A one-page checklist", size="small", idea=True)
+    co.pipeline.advance(small["id"])
+    keys = {t["key"] for t in co.db.all("SELECT key FROM tasks WHERE project_id=?", small["id"])}
+    consults = {k for k in keys if k.startswith("stage-consult-")}
+    assert len(consults) == 1                                      # the planner only: no market or legal tickets
+
+
+def test_the_claude_engine_gets_a_turn_cap_and_the_others_do_not(monkeypatch):
+    from vittics_builder import engines
+    seen = []
+
+    class Done:
+        returncode, stderr = 0, ""
+        stdout = '{"result": "ok", "usage": {}, "num_turns": 3}'
+    monkeypatch.setattr(engines.subprocess, "run", lambda argv, **kw: (seen.append(argv), Done())[1])
+    monkeypatch.setattr(engines, "safe_argv", lambda argv: argv, raising=False)
+    engine = engines.ENGINES["claude-code"] if hasattr(engines, "ENGINES") else None
+    if engine is None:
+        return
+    engines.run_cli(engine, system="s", prompt="p", cwd=None, model="", write=False, run=False, timeout=5, max_turns=30)
+    engines.run_cli(engine, system="s", prompt="p", cwd=None, model="", write=False, run=False, timeout=5)
+    assert seen[0][seen[0].index("--max-turns") + 1] == "30"
+    assert "--max-turns" not in seen[1]
+
+
+def test_costs_break_a_projects_tokens_down_by_kind_of_work(co):
+    from vittics_builder.costs import record_usage, summary
+    p = co.pipeline.create_project("Product", "A library")
+    for purpose, tokens in (("builder via claude-code", 900), ("review via claude-code", 300), ("builder via claude-code", 100)):
+        record_usage(co.db, co.s, co.org.agent("Ram"), p["id"], tokens, 10, purpose, cost=0.0)
+    [row] = [r for r in summary(co.db)["projects"] if r["id"] == p["id"]]
+    assert [(w["purpose"], w["calls"], w["input_tokens"]) for w in row["by_purpose"]] == [("builder", 2, 1000), ("review", 1, 300)]
+
+
+def test_a_project_that_wrote_far_more_than_it_built_is_flagged(tmp_path):
+    from vittics_builder.pipeline import Pipeline
+    co = Company(tmp_path, provider=MockProvider(), create=True)
+    p = co.pipeline.create_project("Wordy", "A one-page checklist", size="small")
+    ws = co.pipeline.workspace(p)
+    ws.write_file("app.js", "const a = 1;\n" * 100)
+    ws.write_file("docs/PRD.md", "word " * 5000)
+    ws.commit("Wordy")
+    assert "words for 100 lines" in Pipeline._docs_ratio(ws)
+    ws.write_file("docs/PRD.md", "word " * 500)
+    ws.commit("Shorter")
+    assert Pipeline._docs_ratio(ws) == ""

@@ -530,6 +530,8 @@ class Pipeline:
         lead = self._stage_ticket(pid, "stage-assessment", f"Assess the idea: {p['name']}", pm, p["brief"],
                                   reporter=author)
         for ref, path, label, question in CONSULTS:
+            if ref != "planner" and self.small(pid):
+                continue                       # a small local tool needs no market or legal opinion, only a feasibility check
             colleague = self.org.pick(kind=ref) if ref == "planner" else self.org.pick(role=ref)
             if not colleague or colleague["id"] == pm["id"]:
                 continue
@@ -898,6 +900,10 @@ class Pipeline:
                 self._release_failure(p, self._check_findings(checked))
                 return
             qa = self.org.pick(kind="qa")
+            waiver = self._waiver(p, ws)
+            if waiver:
+                qa = None                      # the same source was already checked; the CTO accepted what only a person can check
+                self.db.log("work", f"Release QA not repeated: {waiver['by']} accepted the human-only checks for this exact version.", p["id"])
             if qa:
                 self.db.log("work", f"{qa['name']} is running the release check.", p["id"], actor=qa["name"])
                 qa_ticket = self._stage_ticket(p["id"], "stage-release-qa", f"Release QA for {p['name']}", qa,
@@ -915,7 +921,7 @@ class Pipeline:
                     release_findings.append("Integration QA: " + ((integration.review or {}).get("notes") or "No completed approval verdict."))
                 self._stage_status(p["id"], "stage-release-qa", "done", qa["name"], self._verdict(integration.review)
                                    + ("" if not release_findings else " Release remains blocked pending evidence or demonstrated defect repair."), kind="comment")
-            else:
+            elif not waiver:
                 release_findings.append("No QA agent is staffed to validate the full product.")
             if release_findings:
                 verification_only = bool(qa and integration.completed and integration.review
@@ -954,6 +960,11 @@ class Pipeline:
             if later:
                 report += ("\n\nFiled by the team during the release and waiting in the backlog for you to triage "
                            "(not built into this release):\n" + "\n".join(f"- {ticket_key(t['id'])} {t['title']}" for t in later))
+            if (ratio := self._docs_ratio(ws)):
+                report += "\n\n" + ratio
+            if waiver:
+                report += (f"\n\nNot checked by a person: {waiver['by']} accepted the checks only a person can do "
+                           f"(real keys, zoom, contrast, screen reader) without doing them. Their reason: {waiver['reason']}")
             inconclusive = self._inconclusive.pop(pid, [])
             if inconclusive:
                 report += ("\n\nAudits without a verdict (review their reports yourself before approving):\n"
@@ -1081,13 +1092,49 @@ class Pipeline:
         return [*report["errors"], *(f"Check {c['id']} failed when run on this computer: {c['output']}"
                                      for c in report["checks"] if not c["passed"])]
 
+    @staticmethod
+    def _docs_ratio(ws: Workspace) -> str:
+        """Words of documents against lines of code, so a project that wrote far more than it built is visible."""
+        try:
+            files = ws.git("ls-files").splitlines()
+            words = lines = 0
+            for name in files:
+                path = ws.root / name
+                if not path.is_file() or path.stat().st_size > 2_000_000:
+                    continue
+                if name.endswith(".md") or name.startswith("docs/"):
+                    words += len(path.read_text(errors="ignore").split())
+                elif path.suffix in (".py", ".js", ".mjs", ".ts", ".tsx", ".jsx", ".html", ".css", ".go", ".rs", ".java", ".rb", ".php"):
+                    lines += len(path.read_text(errors="ignore").splitlines())
+        except Exception:
+            return ""
+        if words < 2000 or lines == 0 or words / lines < 15:
+            return ""
+        return (f"Documents: about {words:,} words for {lines:,} lines of code ({words // lines} words per line). "
+                "That is a lot of writing for this much product; consider trimming before it is maintained.")
+
+    def _source(self, p: dict) -> str:
+        try:
+            return source_fingerprint(self.workspace(p))
+        except Exception:
+            return ""
+
+    def _waiver(self, p: dict, ws: Workspace) -> dict | None:
+        """The CTO's acceptance of unverified items, only while the source is exactly what they accepted."""
+        row = self.db.one("SELECT waiver FROM projects WHERE id=?", p["id"])
+        w = json.loads(row["waiver"]) if row and row["waiver"] else None
+        try:
+            return w if w and w.get("source") and w["source"] == source_fingerprint(ws) else None
+        except Exception:
+            return None
+
     def _release_failure(self, p: dict, findings: list[str], *, verification_only: bool = False) -> None:
         pid = p["id"]
         if verification_only:
             self._approval(pid, "release_blocked", "cto", f"Human verification required for {p['name']}",
                            "\n".join(findings) + "\n\nRelease remains blocked. Complete the missing checks on the current candidate, "
                            "then retry verification. Do not rebuild unless an application defect is demonstrated.",
-                           {"verification_only": True})
+                           {"verification_only": True, "source": self._source(p)})
             self._stage(pid, "release_blocked")
             return
         if self.runtime.learning:
@@ -1563,10 +1610,22 @@ class Pipeline:
             board_ws=self.workspace(self.project(pid))
             if not assessment or board_ws.changed_files()!='(no uncommitted changes)' or board_ws.git('rev-parse','HEAD')!=assessment['revision']:
                 raise PipelineError('Board assessment is stale; rerun it on the current product revision.')
-        if a["kind"] == "release_blocked" and choice not in ("", "wait", "retry", "repair"):
-            raise PipelineError("Choose wait, retry verification, or repair for a blocked release.")
-        if ok and a["kind"] == "release_blocked":
+        blocked = a["kind"] == "release_blocked"
+        if blocked and choice not in ("", "wait", "retry", "repair", "accept"):
+            raise PipelineError("Choose wait, retry verification, accept, or repair for a blocked release.")
+        if blocked and choice == "accept":
+            if not json.loads(a["payload"]).get("verification_only"):
+                raise PipelineError("Only checks that need a person can be accepted. Failed checks need a repair.")
+            if not feedback.strip():
+                raise PipelineError("Say why you accept it without the human checks. The reason goes on the release record.")
+            ok, decision = True, "approved"
+        elif ok and blocked:
             raise PipelineError("Failed release checks cannot be approved. Reject with repair guidance to retry.")
+        if blocked and choice == "retry" and json.loads(a["payload"]).get("verification_only"):
+            old_source = json.loads(a["payload"]).get("source")
+            if old_source and old_source == self._source(self.project(a["project_id"])):
+                raise PipelineError("Nothing in the product has changed since this check, so QA would stop for the same reason. "
+                                    "Do the checks yourself and accept them with a reason, or ask for a code repair.")
         if ok and a["kind"] in ("release", "signoff", "task_review"):
             ws = self.workspace(self.project(pid))
             if ws.changed_files() != "(no uncommitted changes)" or ws.git("rev-parse", "HEAD") != payload.get("verified_head"):
@@ -1677,6 +1736,12 @@ class Pipeline:
                                f"The CTO rejected your changes to {CONTRACT}, which has been restored to the approved "
                                f"version. Do not edit {CONTRACT} again unless the CTO asks.\n{feedback}", reporter=who)
             self._stage(pid, "build")
+        elif kind == "release_blocked" and choice == "accept":
+            p = self.project(pid)
+            waiver = {"by": who, "reason": feedback.strip(), "source": payload.get("source") or self._source(p), "at": now()}
+            self.db.run("UPDATE projects SET waiver=? WHERE id=?", json.dumps(waiver), pid)
+            self.db.log("project", f"{who} accepted the checks only a person can do, without doing them: {feedback.strip()}", pid, actor=who)
+            self._stage(pid, "build")          # goes on to the release review; QA is not repeated for this exact version
         elif kind == "release_blocked":
             action = choice or ("wait" if payload.get("verification_only") else "repair")
             if action == "wait":
