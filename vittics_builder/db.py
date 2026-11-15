@@ -248,6 +248,11 @@ CREATE TABLE IF NOT EXISTS machine_installs (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS cli_sessions (
+  key TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  created_at TEXT
+);
 CREATE TABLE IF NOT EXISTS review_verdicts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER,

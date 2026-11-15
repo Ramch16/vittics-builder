@@ -22,6 +22,7 @@ llm:
   max_tokens: 8000
   cli_timeout: 1800              # seconds one agent run through a coding CLI may take
   cli_max_turns: 80              # tool turns one builder run through Claude Code may take (0 turns the cap off)
+  cli_resume: true               # a builder sent back on the same ticket continues its own conversation
   cli_review_turns: 30           # the same for reviewers, QA and auditors
   # USD per million tokens. Built in: Haiku 4.5, Sonnet 5.5 and Opus 5.5 list prices (September 2026).
   # prices:

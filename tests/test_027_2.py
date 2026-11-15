@@ -214,3 +214,61 @@ def test_a_small_project_status_report_is_its_facts_with_no_agent_call(co, monke
     co.reports.write(report)
     assert "status_report" not in seen
     assert co.reports.latest(p["id"])[0]["body"]
+
+
+def _fake_cli(co, monkeypatch, who):
+    from vittics_builder.engines import BUILTIN_ENGINES
+    co.s.engines["fake"] = {**BUILTIN_ENGINES["claude-code"], "command": ["fake"], "output": "text"}
+    co.db.run("UPDATE agents SET model='cli:fake' WHERE name=?", who)
+    seen = []
+
+    def cli(engine, **kw):
+        seen.append(kw.get("session"))
+        return dict(text="done", is_error=False, turns=1, cost=0, input_tokens=0, output_tokens=0)
+    monkeypatch.setattr("vittics_builder.agent.run_cli", cli)
+    return seen
+
+
+def test_a_builder_sent_back_on_the_same_ticket_continues_its_conversation(co, monkeypatch):
+    p = co.pipeline.create_project("Tiny", "A checklist", size="small")
+    builder = co.org.pick(kind="builder")
+    seen = _fake_cli(co, monkeypatch, builder["name"])
+    agent = co.org.agent(builder["name"])
+    ws = co.pipeline.workspace(p)
+    co.runtime.run(agent, "Build", ws, project_id=p["id"], meta={"ticket_id": 7})
+    co.runtime.run(agent, "Fix the findings", ws, project_id=p["id"], meta={"ticket_id": 7})
+    co.runtime.run(agent, "Another ticket", ws, project_id=p["id"], meta={"ticket_id": 8})
+    assert seen[0][0] == "new" and seen[1] == ("resume", seen[0][1])
+    assert seen[2][0] == "new" and seen[2][1] != seen[0][1]
+
+
+def test_a_reviewer_never_continues_an_earlier_conversation(co, monkeypatch):
+    p = co.pipeline.create_project("Tiny", "A checklist", size="small")
+    reviewer = co.org.pick(kind="reviewer")
+    seen = _fake_cli(co, monkeypatch, reviewer["name"])
+    agent = co.org.agent(reviewer["name"])
+    for _ in range(2):
+        co.runtime.run(agent, "Review", co.pipeline.workspace(p), project_id=p["id"], meta={"ticket_id": 7})
+    assert seen == [None, None]
+
+
+def test_claude_keeps_its_session_only_when_asked_to():
+    from vittics_builder import engines
+    seen = []
+
+    class Done:
+        returncode, stderr = 0, ""
+        stdout = '{"result": "ok", "usage": {}, "num_turns": 1}'
+    engine = engines.BUILTIN_ENGINES["claude-code"]
+    import subprocess
+    orig = engines.subprocess.run
+    engines.subprocess.run = lambda argv, **kw: (seen.append(argv), Done())[1]
+    try:
+        engines.run_cli(engine, system="s", prompt="p", cwd=None, model="", write=False, run=False, timeout=5)
+        engines.run_cli(engine, system="s", prompt="p", cwd=None, model="", write=False, run=False, timeout=5, session=("new", "abc"))
+        engines.run_cli(engine, system="s", prompt="p", cwd=None, model="", write=False, run=False, timeout=5, session=("resume", "abc"))
+    finally:
+        engines.subprocess.run = orig
+    assert "--no-session-persistence" in seen[0] and "--resume" not in seen[0]
+    assert "--no-session-persistence" not in seen[1] and seen[1][seen[1].index("--session-id") + 1] == "abc"
+    assert "--no-session-persistence" not in seen[2] and seen[2][seen[2].index("--resume") + 1] == "abc"
