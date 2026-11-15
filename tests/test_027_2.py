@@ -183,3 +183,34 @@ def test_a_small_project_is_not_stopped_by_a_missing_second_qa(co, monkeypatch):
         pytest.skip("no role lookup to build the scenario")
     only_qa = co.org.pick(role="qa_engineer")
     assert co.pipeline._run_task(p, task, co.pipeline.workspace(p))
+
+
+def test_a_small_project_goes_on_when_only_human_checks_are_left(co, monkeypatch):
+    from vittics_builder.agent import RunResult
+    from test_pipeline import decide_next
+    original = co.runtime.run
+
+    def run(agent, *args, **kwargs):
+        if (kwargs.get("meta") or {}).get("purpose") == "integration":
+            return RunResult(completed=True, review={"score": 85, "verdict": "request_changes", "blocker_type": "verification",
+                "notes": "No browser here.", "acceptance": [{"criterion": "Click through in a browser", "status": "unverified", "evidence": "no browser"}]})
+        return original(agent, *args, **kwargs)
+    monkeypatch.setattr(co.runtime, "run", run)
+    p = co.pipeline.create_project("Tiny", "Build a library", size="small")
+    co.pipeline.advance(p["id"])
+    decide_next(co, "ceo")
+    result = decide_next(co, "cto")
+    assert result["stage"] != "release_blocked"
+    assert not [a for a in co.pipeline.inbox("cto") if a["kind"] == "release_blocked"]
+
+
+def test_a_small_project_status_report_is_its_facts_with_no_agent_call(co, monkeypatch):
+    p = co.pipeline.create_project("Tiny", "A checklist", size="small")
+    seen = []
+    orig = co.runtime.run
+    monkeypatch.setattr(co.runtime, "run", lambda *a, **k: seen.append((k.get("meta") or {}).get("purpose")) or orig(*a, **k))
+    co.reports.request(p["id"], "Test")
+    report = co.db.one("SELECT * FROM reports WHERE project_id=? ORDER BY id DESC", p["id"])
+    co.reports.write(report)
+    assert "status_report" not in seen
+    assert co.reports.latest(p["id"])[0]["body"]

@@ -73,7 +73,7 @@ class Reports:
         pid = report["project_id"]
         facts = self.facts(pid)
         pm, body = self.co.org.pick(kind="product"), ""
-        if pm:
+        if pm and not self.co.pipeline.small(pid):     # a small project's report is its facts: no agent call
             try:
                 p = self.co.pipeline.project(pid)
                 ask = (f"Write a short status report on \"{p['name']}\" for {self.co.s.ceo_name} (CEO) and "

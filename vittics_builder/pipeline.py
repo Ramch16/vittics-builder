@@ -928,7 +928,7 @@ class Pipeline:
         self.releasing.add(pid)
         release_started = now()
         try:
-            release_findings = []
+            release_findings, human_only = [], ""
             # Agents' sandboxes cannot reach Docker, databases, local ports or browsers, so the checks run here first:
             # real failures go straight back to Engineering, and QA reviews with the real results in hand.
             # Only the checks the CTO approved are run.
@@ -965,13 +965,18 @@ class Pipeline:
                                    + ("" if not release_findings else " Release remains blocked pending evidence or demonstrated defect repair."), kind="comment")
             elif not waiver:
                 release_findings.append("No QA agent is staffed to validate the full product.")
+            verification_only = bool(release_findings and qa and integration.completed and integration.review
+                and integration.review.get("blocker_type") == "verification"
+                and integration.review.get("verdict") == "request_changes"
+                and integration.review.get("acceptance")
+                and any(c.get("status") == "unverified" for c in integration.review["acceptance"])
+                and not any(c.get("status") == "failed" for c in integration.review["acceptance"]))
+            if verification_only and self.small(pid):
+                # Nothing failed; only checks a person must do are left. A small project goes on and says so.
+                human_only = "; ".join(c.get("criterion", "") for c in integration.review["acceptance"] if c.get("status") == "unverified")[:600]
+                self.db.log("work", "Release QA found nothing failing; the checks only a person can do were not run (small project, continuing).", p["id"])
+                release_findings, verification_only = [], False
             if release_findings:
-                verification_only = bool(qa and integration.completed and integration.review
-                    and integration.review.get("blocker_type") == "verification"
-                    and integration.review.get("verdict") == "request_changes"
-                    and integration.review.get("acceptance")
-                    and any(c.get("status") == "unverified" for c in integration.review["acceptance"])
-                    and not any(c.get("status") == "failed" for c in integration.review["acceptance"]))
                 self._release_failure(p, release_findings, verification_only=verification_only)
                 return
             open_findings = self._audit(p, ws, checked, checked_head)
@@ -1004,6 +1009,8 @@ class Pipeline:
                            "(not built into this release):\n" + "\n".join(f"- {ticket_key(t['id'])} {t['title']}" for t in later))
             if (ratio := self._docs_ratio(ws)):
                 report += "\n\n" + ratio
+            if human_only:
+                report += "\n\nNot checked by a person (no agent can do these; nothing failed): " + human_only
             if waiver:
                 report += (f"\n\nNot checked by a person: {waiver['by']} accepted the checks only a person can do "
                            f"(real keys, zoom, contrast, screen reader) without doing them. Their reason: {waiver['reason']}")
@@ -1547,7 +1554,8 @@ class Pipeline:
                     f"Task {task['key']} failed review: " + '\n'.join(findings), 'Vittics Builder', pid,
                     category='failure', source=f"ticket:{task['id']};attempt:{task['attempts'] + 1}")
             if not approved and self.runtime.learning:
-                self.runtime.learning.after_failure(res.route_id, pid)
+                if not self.small(pid):          # a small project is not worth a new house strategy
+                    self.runtime.learning.after_failure(res.route_id, pid)
 
             if approved:
                 ws.commit(f"[{task['key']}] {task['title']} ({agent['name']})")

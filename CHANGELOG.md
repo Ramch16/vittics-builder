@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.27.5 — 2026-11-15
+The one-page checklist on 0.27.4 finished at 9.33M input tokens (down from 14.82M), but release QA still stopped for
+checks only a person can do, and a strategy proposal and three status reports each cost an agent call.
+- **A small project's release goes on when nothing failed.** If the only open items are checks a person must do
+  (browser clicks, zoom, contrast), release QA no longer stops the project for a decision. The release summary lists
+  them under "Not checked by a person". A failed check still blocks, and Standard projects are unchanged.
+- **No strategy proposals for a small project.** Failed reviews no longer start an agent that proposes a house strategy.
+- **Status reports on a small project are written from the facts.** No agent call.
+
+Not done: agents still start from scratch on every run (no session resume); this is the largest remaining cost.
+
 ## 0.27.4 — 2026-11-15
 Rebuilding the one-page checklist on 0.27.3 cut the planning and build cost (3.2M tokens at the point where the
 previous run had used over 5M) but stopped at review: the code reviewer filed a ticket, "Manually verify browser flow",
