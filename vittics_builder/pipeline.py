@@ -1476,7 +1476,7 @@ class Pipeline:
                 "assignment": {k: task[k] for k in ("title", "description", "role", "feedback")}}), task["id"])
             self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
             note(self.db, task["id"], agent["name"], "Submitted for review.\n" + (res.text or "")[:1500])
-            findings, approved, scores, person_only = [], res.completed, [], []
+            findings, approved, scores, person_only, skipped = [], res.completed, [], [], []
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
             diff_text = self._review_diff(ws, review_base)
@@ -1491,6 +1491,11 @@ class Pipeline:
             for check_role in self._checkers(pid, task=task, paths=review_paths):
                 checker = self.org.pick(role=check_role["id"], exclude=agent["id"])
                 if not checker:
+                    if self.small(pid):          # one QA seat that wrote the ticket cannot check it: the reviewer's check stands
+                        skipped.append(check_role["title"])
+                        self.db.log("review_policy", f"No independent {check_role['title']} for [{task['key']}]; "
+                                    "the other check stands (small project).", pid)
+                        continue
                     if self.s.review_mode == 'adaptive':
                         raise PipelineError(f"Adaptive review requires an independent {check_role['title']}. "
                                             "Review is incomplete; restore staffing before resuming.")
@@ -1532,6 +1537,8 @@ class Pipeline:
                 elif rv["verdict"] != "approve":
                     approved = False
                     findings.append(f"{checker['name']} ({check_role['title']}, {rv['score']:.0f}/100): {rv['notes']}")
+            if skipped and not scores:           # nobody at all could check it: that is a staffing problem
+                raise PipelineError(f"Review requires an independent {skipped[0]}. Review is incomplete; restore staffing before resuming.")
             self.perf.evaluate(agent["id"])
             if res.route_id and self.runtime.router:
                 self.runtime.router.evaluate(res.route_id, approved, sum(scores) / len(scores) if scores else None, lessons='\n'.join(findings))

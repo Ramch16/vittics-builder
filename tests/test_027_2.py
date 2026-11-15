@@ -147,3 +147,39 @@ def test_a_ticket_with_a_real_defect_is_still_sent_back(co, monkeypatch):
     monkeypatch.setattr(co.runtime, "run", run)
     co.pipeline._run_task(p, task, co.pipeline.workspace(p))
     assert co.db.one("SELECT attempts FROM tasks WHERE id=?", task["id"])["attempts"] >= 1
+
+
+def test_a_small_project_does_not_build_tickets_agents_file_on_their_own(co):
+    small = co.pipeline.create_project("Tiny", "A checklist", size="small")
+    big = co.pipeline.create_project("Big", "A product")
+    for p in (small, big):
+        co.db.run("UPDATE projects SET stage='build' WHERE id=?", p["id"])
+    agent = co.org.agent("Pavan")
+
+    def file(pid, **extra):
+        result = type("R", (), {"filed": []})()
+        co.tickets.agent_tool(agent, "create_ticket", {"title": "Manually verify the browser flow", "description": "Click through it",
+                                                       "role": "qa_engineer", **extra}, pid, None, result)
+        return co.db.one("SELECT status FROM tasks WHERE id=?", int(result.filed[0].split("-")[1]))["status"]
+    assert file(small["id"]) == "backlog" and file(big["id"]) == "todo"
+    assert file(small["id"], title="x", type="bug", priority="urgent") == "todo"      # a real urgent bug is still built
+
+
+def test_a_small_project_is_not_stopped_by_a_missing_second_qa(co, monkeypatch):
+    from vittics_builder.agent import RunResult
+    p = co.pipeline.create_project("Tiny", "A checklist", size="small")
+    task = co.tickets.create(p["id"], "Verify", "Check it", "Lucky", status="todo", role="qa_engineer")
+    original = co.runtime.run
+    monkeypatch.setattr(co.pipeline, "_checkers", lambda *a, **k: [co.org.role("qa_engineer"), co.org.role("code_reviewer")]
+                        if hasattr(co.org, "role") else [])
+
+    def run(agent, instructions, workspace, **kw):
+        if (kw.get("meta") or {}).get("author"):
+            return RunResult(completed=True, review={"score": 90, "verdict": "approve", "notes": "ok"})
+        return original(agent, instructions, workspace, **kw)
+    monkeypatch.setattr(co.runtime, "run", run)
+    if not hasattr(co.org, "role"):
+        import pytest
+        pytest.skip("no role lookup to build the scenario")
+    only_qa = co.org.pick(role="qa_engineer")
+    assert co.pipeline._run_task(p, task, co.pipeline.workspace(p))
