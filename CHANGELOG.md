@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.27.4 — 2026-11-15
+Rebuilding the one-page checklist on 0.27.3 cut the planning and build cost (3.2M tokens at the point where the
+previous run had used over 5M) but stopped at review: the code reviewer filed a ticket, "Manually verify browser flow",
+the only QA agent did it, and no independent QA existed to review that.
+- **A small project builds only its plan.** Tickets agents file on their own wait in the backlog for triage (an urgent
+  or high bug is still built), instead of becoming extra work nobody asked for.
+- **A small project is not stopped by a missing second QA.** When the only QA seat wrote the ticket, the code reviewer's
+  check stands. It still stops if nobody at all could review.
+
+Not done: agents still start from scratch on every run (no session resume).
+
 ## 0.27.3 — 2026-11-15
 A one-page checklist rebuilt on 0.27.2 still used 14.8M input tokens. The architecture said "plain HTML, no framework"
 and then added Vitest, Playwright and a Node server (a 2,297-line lockfile); the e2e ticket alone took about 3.4M, and a
