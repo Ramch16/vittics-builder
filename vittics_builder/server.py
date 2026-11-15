@@ -179,6 +179,7 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
         threading.Thread(target=work, daemon=True).start()
 
     co.chat.on_work = co.feedback.on_work = run_in_background
+    co.pipeline.auto_resume = run_in_background        # after a usage limit, work starts again when the engine is back
     co.chat.background = True               # replies on tickets arrive without holding up the page
 
     def guard(fn):

@@ -114,3 +114,70 @@ def rmtree_force(path) -> None:
     else:
         shutil.rmtree(path, onerror=retry)
 
+
+
+def pid_alive(pid: int | None) -> bool:
+    """Is this process still running? Never signals it: on Windows os.kill(pid, 0) terminates the process."""
+    if not pid:
+        return False
+    if os.name == "nt":
+        import ctypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel32.OpenProcess(0x1000, 0, int(pid))              # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() == 5                        # access denied: it exists, it is not ours
+        try:
+            code = ctypes.c_ulong()
+            return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                              # it exists; it just is not ours
+    except OSError:
+        return False
+    return True
+
+
+def kill_descendants() -> int:
+    """Stop every process this one started and has not reaped (agents' CLIs, previews). Used as the app quits, so a
+    closed window does not leave an agent working on its own. Returns how many were stopped. Never stops this process."""
+    import signal
+    import subprocess
+    me = os.getpid()
+    try:
+        if os.name == "nt":
+            table = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                    "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId,$_.ParentProcessId }"],
+                                   capture_output=True, text=True, timeout=30).stdout
+        else:
+            table = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    children: dict[int, list[int]] = {}
+    for line in table.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            children.setdefault(int(parts[1]), []).append(int(parts[0]))
+    found, queue = [], list(children.get(me, []))
+    while queue:
+        pid = queue.pop()
+        if pid != me and pid not in found:
+            found.append(pid)
+            queue.extend(children.get(pid, []))
+    for pid in found:
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return len(found)

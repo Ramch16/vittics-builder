@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.27.2 — 2026-11-14
+From the checklist pilot finished on 0.27.1 (18.8M input tokens: builders 60%, QA and reviews 25%; two reviewers put on
+probation for blocking on checks only a person could do):
+- **Reviewers are not marked wrong for what only a person could check.** A review that blocked only for evidence a
+  person has to give (`blocker_type: verification`) is not judged against the CTO's decision to accept anyway, so it no
+  longer drags the reviewer toward probation.
+- **Quitting the app stops its agents.** Agents started by the app are stopped when it exits, and a backend left with no
+  parent exits by itself. Before, an agent could keep working (and spending) after its window closed.
+- **Work starts again by itself after a usage limit.** When an engine says when it is back (or after 30 minutes),
+  Vittics resumes the project while it is open, up to four times in a row. An expired login is not retried; it needs you.
+- **Small projects: builders are told to work economically** (whole files in one step, run checks once, short check
+  scripts), because every extra step re-reads the whole conversation.
+- One shared "is this process alive" check instead of two.
+
+Not done: agents still start from scratch on every run (no session resume), there are no desktop notifications, and
+failover between engines is still off by default.
+
 ## 0.27.1 — 2026-11-14
 From the first pilot rebuilt on 0.27.0 (a personal checklist): its release QA looped, blocked each time for checks only
 a person can do (real keys, 200% zoom, screen reader), and the project used 17.4M input tokens, more than before.
