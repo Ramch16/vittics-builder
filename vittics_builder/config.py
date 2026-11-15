@@ -51,6 +51,7 @@ class Settings:
     skills: list = field(default_factory=lambda: ["karpathy-guidelines"])
     cli_timeout: int = 1800
     cli_max_turns: int = 80        # tool turns one builder run through a coding CLI may take (0: no cap)
+    screenshots: bool = True       # release QA looks at screenshots of the page, taken with a browser on this computer
     cli_resume: bool = True        # a builder sent back on the same ticket continues its own conversation
     cli_review_turns: int = 30     # the same for reviewers, QA and auditors, who should only read and check
     hire_when_waiting: int = 3
@@ -126,6 +127,7 @@ def load_settings(root: str | os.PathLike | None = None) -> Settings:
     s.cli_max_turns = int(llm.get("cli_max_turns", s.cli_max_turns))
     s.cli_review_turns = int(llm.get("cli_review_turns", s.cli_review_turns))
     s.cli_resume = bool(llm.get("cli_resume", s.cli_resume))
+    s.screenshots = bool(llm.get("screenshots", s.screenshots))
     from .llm import ENDPOINTS
     s.endpoints = {**ENDPOINTS, **(raw.get("endpoints") or {})}
     if "skills" in raw:

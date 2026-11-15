@@ -299,7 +299,7 @@ class AgentRuntime:
                 checker = role["kind"] in ("reviewer", "qa", "auditor")
                 kw = dict(system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
                           write=can_write, run=can_run, timeout=self.s.cli_timeout,
-                          max_turns=self.s.cli_review_turns if checker else self.s.cli_max_turns)
+                          max_turns=meta.get('max_turns') or (self.s.cli_review_turns if checker else self.s.cli_max_turns))
                 # A builder sent back on the same ticket keeps its conversation (it already read the files and wrote
                 # the code); reviewers and QA always start fresh, so a check stays independent.
                 key = (f"{project_id}:{agent['id']}:{meta['ticket_id']}"

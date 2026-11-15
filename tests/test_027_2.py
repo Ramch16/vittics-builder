@@ -272,3 +272,57 @@ def test_claude_keeps_its_session_only_when_asked_to():
     assert "--no-session-persistence" in seen[0] and "--resume" not in seen[0]
     assert "--no-session-persistence" not in seen[1] and seen[1][seen[1].index("--session-id") + 1] == "abc"
     assert "--no-session-persistence" not in seen[2] and seen[2][seen[2].index("--resume") + 1] == "abc"
+
+
+def _asks_for(tmp_path, monkeypatch, size):
+    from vittics_builder.company import Company
+    from vittics_builder.llm import MockProvider
+    from test_pipeline import decide_next
+    co = Company(tmp_path / size, provider=MockProvider(), create=True)
+    co.s.screenshots = False
+    asks = []
+    original = co.runtime.run
+
+    def run(agent, instructions, workspace, **kw):
+        asks.append((kw.get("meta") or {}, instructions))
+        return original(agent, instructions, workspace, **kw)
+    monkeypatch.setattr(co.runtime, "run", run)
+    p = co.pipeline.create_project("Product", "Build a library", size=size)
+    co.pipeline.advance(p["id"])
+    decide_next(co, "ceo")
+    decide_next(co, "cto")
+    return [a for _, a in asks], [(m, a) for m, a in asks]
+
+
+def test_every_size_gets_ticket_sizing_visual_direction_and_the_builder_applies_it(tmp_path, monkeypatch):
+    from vittics_builder.pipeline import TICKET_SIZE, VISUAL_DIRECTION, APPLY_DIRECTION
+    for size in ("small", "standard"):
+        asks, _ = _asks_for(tmp_path, monkeypatch, size)
+        assert any(TICKET_SIZE in a for a in asks), size
+        assert any(VISUAL_DIRECTION in a for a in asks), size
+        assert any(APPLY_DIRECTION in a for a in asks), size
+    small, _ = _asks_for(tmp_path / "again", monkeypatch, "small")
+    assert not any("plan one build ticket" in a for a in small)
+
+
+def test_only_a_small_projects_release_qa_gets_a_one_pass_cap(tmp_path, monkeypatch):
+    from vittics_builder.pipeline import SMALL_QA
+    for size in ("small", "standard"):
+        _, pairs = _asks_for(tmp_path / "q", monkeypatch, size)
+        qa = [(m, a) for m, a in pairs if m.get("purpose") == "integration"]
+        assert qa, size
+        assert all((SMALL_QA in a) == (size == "small") for _, a in qa)
+        assert all((m.get("max_turns") == 20) == (size == "small") for m, _ in qa)
+
+
+def test_screenshots_are_taken_outside_git_and_skipped_without_a_browser(co, monkeypatch):
+    import shutil
+    p = co.pipeline.create_project("Shots", "A page", size="small")
+    ws = co.pipeline.workspace(p)
+    ws.write_file("index.html", "<html><body><h1>Hello</h1></body></html>")
+    ws.commit("page")
+    assert co.pipeline._screenshots(p, ws) is False                     # off in tests
+    co.s.screenshots = True
+    monkeypatch.setattr(shutil, "which", lambda n: None)
+    monkeypatch.setattr("vittics_builder.pipeline.Path.is_file", lambda self: self.name == "index.html")
+    assert co.pipeline._screenshots(p, ws) is False                     # no browser installed

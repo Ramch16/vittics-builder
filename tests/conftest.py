@@ -14,6 +14,7 @@ def offline(monkeypatch):
 def make_company(tmp_path):
     def build(bad_agents=(), **hr):
         co = Company(tmp_path, provider=MockProvider(set(bad_agents)), create=True)
+        co.s.screenshots = False                 # tests never open a real browser
         for key, value in hr.items():
             setattr(co.s.hr, key, value)
         return co
