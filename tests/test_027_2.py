@@ -294,15 +294,14 @@ def _asks_for(tmp_path, monkeypatch, size):
     return [a for _, a in asks], [(m, a) for m, a in asks]
 
 
-def test_every_size_gets_ticket_sizing_visual_direction_and_the_builder_applies_it(tmp_path, monkeypatch):
+def test_ticket_sizing_is_for_standard_projects_and_a_small_one_builds_one_ticket(tmp_path, monkeypatch):
     from vittics_builder.pipeline import TICKET_SIZE, VISUAL_DIRECTION, APPLY_DIRECTION
     for size in ("small", "standard"):
         asks, _ = _asks_for(tmp_path, monkeypatch, size)
-        assert any(TICKET_SIZE in a for a in asks), size
-        assert any(VISUAL_DIRECTION in a for a in asks), size
+        assert any(TICKET_SIZE in a for a in asks) == (size == "standard"), size
+        assert any("plan one build ticket" in a or "one build ticket for the app" in a for a in asks) == (size == "small"), size
+        assert any(VISUAL_DIRECTION in a for a in asks), size              # the visual direction is for every size
         assert any(APPLY_DIRECTION in a for a in asks), size
-    small, _ = _asks_for(tmp_path / "again", monkeypatch, "small")
-    assert not any("plan one build ticket" in a for a in small)
 
 
 def test_only_a_small_projects_release_qa_gets_a_one_pass_cap(tmp_path, monkeypatch):
@@ -326,3 +325,47 @@ def test_screenshots_are_taken_outside_git_and_skipped_without_a_browser(co, mon
     monkeypatch.setattr(shutil, "which", lambda n: None)
     monkeypatch.setattr("vittics_builder.pipeline.Path.is_file", lambda self: self.name == "index.html")
     assert co.pipeline._screenshots(p, ws) is False                     # no browser installed
+
+
+def test_work_a_restart_cut_off_carries_on_by_itself(co, monkeypatch):
+    from fastapi.testclient import TestClient
+    from vittics_builder.server import create_app
+    p = co.pipeline.create_project("Tiny", "A checklist", size="small")
+    other = co.pipeline.create_project("Paused", "Another", size="small")
+    agent = co.org.pick(kind="builder")
+    for pid in (p["id"], other["id"]):
+        co.db.run("INSERT INTO runs (agent_id, project_id, purpose, status, started_at, owner_pid) VALUES (?,?,?,?,?,?)",
+                  agent["id"], pid, "builder", "running", "2026-01-01T00:00:00+00:00", 999999)
+    co.db.run("UPDATE projects SET stage='paused' WHERE id=?", other["id"])
+    assert co.runs.reap() == 2 and co.runs.interrupted_projects == {p["id"], other["id"]}
+    advanced = []
+    monkeypatch.setattr(co.pipeline, "advance", lambda pid, **k: advanced.append(pid))
+    with TestClient(create_app(co, {"ceo": "c", "cto": "t"})):
+        import time
+        time.sleep(0.3)
+    assert advanced == [p["id"]]                                       # the paused one stays paused
+
+
+def test_the_phone_screenshot_uses_a_390px_frame(co, monkeypatch, tmp_path):
+    import shutil
+    from vittics_builder import pipeline as pl
+    p = co.pipeline.create_project("Shots", "A page", size="small")
+    ws = co.pipeline.workspace(p)
+    ws.write_file("index.html", "<html><body>Hi</body></html>")
+    ws.commit("page")
+    co.s.screenshots = True
+    monkeypatch.setattr(shutil, "which", lambda n: "/fake/chrome")
+    targets = []
+
+    def run(argv, **kw):
+        shot = next(a for a in argv if a.startswith("--screenshot="))[len("--screenshot="):]
+        targets.append((shot.rsplit("/", 1)[-1], argv[-1]))
+        open(shot, "wb").write(b"png")
+
+        class R:
+            returncode = 0
+        return R()
+    monkeypatch.setattr(pl.subprocess, "run", run)
+    assert co.pipeline._screenshots(p, ws) is True
+    assert targets[0][1].endswith("index.html") and targets[1][1].endswith("phone.html")
+    assert "width:390px" in (ws.root / ".shots" / "phone.html").read_text()

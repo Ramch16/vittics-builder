@@ -76,7 +76,8 @@ class Runs:
         any run may last. Returns how many were stopped."""
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=stale_after)).isoformat(timespec="seconds")
         stopped = 0
-        for row in self.db.all("SELECT id, owner_pid, started_at FROM runs WHERE status='running'"):
+        self.interrupted_projects = set()
+        for row in self.db.all("SELECT id, project_id, owner_pid, started_at FROM runs WHERE status='running'"):
             if row["owner_pid"]:
                 dead = row["owner_pid"] != os.getpid() and not _alive(row["owner_pid"])
             else:
@@ -84,6 +85,8 @@ class Runs:
             if dead:
                 self.finish(row["id"], "stopped", "Interrupted: the app was closed or restarted while this ran.")
                 stopped += 1
+                if row["project_id"]:
+                    self.interrupted_projects.add(row["project_id"])     # the app carries these on when it starts
         return stopped
 
     # ---- steering ----------------------------------------------------------

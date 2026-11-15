@@ -158,6 +158,13 @@ def create_app(co: Company, tokens: dict[str, str], desktop: bool = False) -> Fa
     @asynccontextmanager
     async def lifespan(app):
         if co.workers.service()['enabled']:co.workers.start()
+        for pid in sorted(getattr(co.runs, "interrupted_projects", ())):    # work a restart cut off goes on by itself
+            try:
+                if co.pipeline.project(pid)["stage"] not in ("done", "live", "dropped", "parked", "paused"):
+                    co.db.log("work", "The app restarted while this project was working; carrying on.", pid)
+                    run_in_background(pid)
+            except Exception:
+                pass
         try:yield
         finally:
             co.workers.stop()
