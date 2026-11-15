@@ -52,6 +52,7 @@ BUILTIN_ENGINES: dict[str, dict] = {
              "prompt": "arg", "system": "prompt", "output": "text", "subscription": True, "verified": False,
              "env_keep": ["DASHSCOPE_API_KEY", "OPENAI_API_KEY"]},
     "claude-code": {
+        "session_args": {"new": ["--session-id", "{id}"], "resume": ["--resume", "{id}"], "ephemeral": "--no-session-persistence"},
         "command": ["claude", "-p", "--output-format", "json", "--no-session-persistence",
                     "--permission-mode", "acceptEdits", "--append-system-prompt", "{system}"],
         "model_args": ["--model", "{model}"],
@@ -195,7 +196,7 @@ def engine_env(engine: dict, base=None) -> dict[str, str]:
 
 
 def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: str, write: bool, run: bool,
-            timeout: int, max_turns: int | None = None) -> dict:
+            timeout: int, max_turns: int | None = None, session: tuple | None = None) -> dict:
     """Run one CLI turn. Reading is always allowed; editing files and running commands only when granted."""
     if engine.get("system") == "prompt":    # no system-prompt flag: the role and rules lead the prompt
         prompt = f"{system}\n\n---\n\n{prompt}"
@@ -206,6 +207,10 @@ def run_cli(engine: dict, *, system: str, prompt: str, cwd: str | None, model: s
             part = part.replace(key, value)
         return part
     argv = [put(part) for part in engine["command"]]
+    if session and engine.get("session_args"):      # keep this conversation, or pick up the one kept earlier
+        sa = engine["session_args"]
+        argv = [a for a in argv if a != sa.get("ephemeral")]
+        argv += [part.replace("{id}", session[1]) for part in sa["resume" if session[0] == "resume" else "new"]]
     if engine.get("level_args"):
         argv += list(engine["level_args"].get("write" if write else "read", []))
     if model and engine.get("model_args"):

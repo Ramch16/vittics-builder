@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.28.0 — 2026-11-15
+On 0.27.5 the one-page checklist cost 4.07M input tokens (9.33M on 0.27.4, 14.82M before that). Most of what is left is
+agents re-reading and re-discovering what they already knew, because every run started from nothing.
+- **A builder sent back on the same ticket continues its own conversation.** It already read the files and wrote the
+  code, so it fixes the findings instead of starting over. Reviewers, QA and auditors still start fresh every time, so a
+  check stays independent. If the saved conversation is gone, the builder starts a new one. Turn it off with
+  `llm.cli_resume: false`. Claude Code only; other engines are unchanged.
+- The conversation is kept by Claude Code on this computer (its normal session files) only for builders on a ticket.
+
+Not measured yet: how many tokens this saves. A project that is never sent back for rework saves nothing, so a
+clean one-page build looks the same as on 0.27.5.
+
 ## 0.27.5 — 2026-11-15
 The one-page checklist on 0.27.4 finished at 9.33M input tokens (down from 14.82M), but release QA still stopped for
 checks only a person can do, and a strategy proposal and three status reports each cost an agent call.

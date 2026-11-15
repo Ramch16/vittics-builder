@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+import uuid
 from dataclasses import dataclass, field
 
 from .timings import timed_stage
@@ -13,7 +15,7 @@ from .failover import limit_key
 from .limits import project_limit
 from .memory import MEMORY_TOOL_SPECS
 from .runs import describe_call
-from .db import DB
+from .db import DB, now
 from .org import Org
 from .tickets import TICKET_RULES, TICKET_TOOL_SPECS, TicketError
 from .tools import ToolError, Workspace, tool_schema
@@ -295,9 +297,29 @@ class AgentRuntime:
                                 project_id, actor=agent["name"])
             if out is None:
                 checker = role["kind"] in ("reviewer", "qa", "auditor")
-                out = run_cli(engine, system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
-                              write=can_write, run=can_run, timeout=self.s.cli_timeout,
-                              max_turns=self.s.cli_review_turns if checker else self.s.cli_max_turns)
+                kw = dict(system=system, prompt=prompt, cwd=str(ws.root) if ws else None, model=model,
+                          write=can_write, run=can_run, timeout=self.s.cli_timeout,
+                          max_turns=self.s.cli_review_turns if checker else self.s.cli_max_turns)
+                # A builder sent back on the same ticket keeps its conversation (it already read the files and wrote
+                # the code); reviewers and QA always start fresh, so a check stays independent.
+                key = (f"{project_id}:{agent['id']}:{meta['ticket_id']}"
+                       if self.s.cli_resume and role["kind"] == "builder" and project_id and meta.get("ticket_id")
+                       and engine.get("session_args") and not chat_with else None)
+                kept = self.db.one("SELECT session_id FROM cli_sessions WHERE key=?", key) if key else None
+                if key and kept:
+                    out = run_cli(engine, session=("resume", kept["session_id"]), **kw)
+                    if out["is_error"] and re.search(r"no conversation found|session.{0,20}not found", out["text"], re.I):
+                        self.db.run("DELETE FROM cli_sessions WHERE key=?", key)
+                        kept = None
+                    else:
+                        self.db.log("work", f"{agent['name']} continued the earlier conversation on this ticket.", project_id, actor=agent["name"])
+                if key and not kept:
+                    sid = str(uuid.uuid4())
+                    out = run_cli(engine, session=("new", sid), **kw)
+                    if not out["is_error"]:
+                        self.db.run("INSERT OR REPLACE INTO cli_sessions(key, session_id, created_at) VALUES (?,?,?)", key, sid, now())
+                elif not key:
+                    out = run_cli(engine, **kw)
         except EngineUnavailable as exc:      # a usage limit is nobody's failure: stop, don't score or rework
             raise EngineUnavailable(f"{engine_name} is unavailable: {exc}") from exc
         except EngineError as exc:
