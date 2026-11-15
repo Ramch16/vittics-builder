@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.28.1 — 2026-11-15
+A notes app (eight features) on 0.28.0 cost 9.47M input tokens, because the planner put the whole app in one ticket
+and one builder session re-read its growing conversation on every step. Its design was also generic: the one-page
+design for small projects said "system sans, 14px, a solid accent button" and nothing else.
+- **Tickets are sized for one short session, for every project size.** About two or three features each, with their own
+  tests. A product of up to four features can still be one ticket; a bigger one is split. (Small projects were told to
+  plan one ticket; that line is gone.)
+- **The design starts with a visual direction.** A palette with dark-mode versions, type, corner radius, spacing and one
+  distinctive trait. Builders apply it in the stylesheet instead of leaving default styling.
+- **Release QA looks at the page.** Chrome or Edge on this computer takes a desktop and a phone-width screenshot (kept in
+  `.shots/`, which git ignores, so they never change what was verified); QA reports clear visual problems as defects.
+  Skipped when there is no browser, no `index.html` at the top of the project, or `llm.screenshots: false`. Pages that
+  need a server may show blank; QA is told not to count that as a defect.
+- **A small project's release QA does one pass.** Capped at 20 turns, with a short report.
+
+Not measured yet: the token saving from smaller tickets, and whether the visual direction changes how the result looks.
+
 ## 0.28.0 — 2026-11-15
 On 0.27.5 the one-page checklist cost 4.07M input tokens (9.33M on 0.27.4, 14.82M before that). Most of what is left is
 agents re-reading and re-discovering what they already knew, because every run started from nothing.

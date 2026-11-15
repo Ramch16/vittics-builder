@@ -59,6 +59,26 @@ SIZES = ("small", "standard")
 # Departments whose tickets are about documents, not code: they need the ticket's files, not the whole design.
 DOCUMENT_DEPARTMENTS = ("Customer Support", "Marketing", "Product", "Legal and Compliance")
 # Every document is read again by every later agent, on every turn: keep them proportionate and honest.
+TICKET_SIZE = ("Size every build ticket so one builder can finish it in one short session: about two or three "
+               "features each (a feature is something the user can do, such as \"search notes\"), with its own tests. "
+               "A product with up to four features can be a single ticket; a bigger one is split into tickets of a few "
+               "features each, never the whole product in one ticket, because a long session re-reads everything it "
+               "has done on every step.")
+VISUAL_DIRECTION = ("Start docs/DESIGN.md with a \"Visual direction\" section: a palette of four or five named colours "
+                    "with hex values (background, surface, text, accent, and a danger colour) and their dark-mode "
+                    "versions, a deliberate type choice (system fonts are fine; give the families, sizes and weights), a "
+                    "corner radius, a spacing scale, and one distinctive trait that gives the product character (for "
+                    "example a warm paper-like surface, bold headings or a playful accent). Do not leave default browser "
+                    "styling. If the brief names a style, follow it.")
+APPLY_DIRECTION = ("Apply the Visual direction in docs/DESIGN.md in the stylesheet (its colours, type, radius and spacing); "
+                   "do not leave default browser styling.")
+SMALL_QA = ("This is a small project: do one pass. Run the tests once, open each main file once, write a short "
+            "docs/QA_REPORT.md (under one page) and submit. Do not re-run checks you have already seen pass.")
+SCREENSHOT_QA = ("If .shots/desktop.png and .shots/mobile.png exist, look at both (Read them). Judge only clear problems "
+                 "against the Visual direction in docs/DESIGN.md: unstyled or default-looking controls, unreadable "
+                 "contrast, clipped or overlapping content, or a mobile page that does not fit the width. A clear "
+                 "problem is a defect (blocker_type defect) with what you saw; if the page looks blank because it needs "
+                 "a server, say so and do not treat that as a defect.\n\n")
 SMALL_BUILD = ("This is a small project, so work economically: write whole files in one step, run the checks once, "
                "do not re-read files you just wrote, and keep any check scripts short (a few focused checks, not an "
                "exhaustive harness). Every extra step re-reads the whole conversation, which is what costs tokens.")
@@ -732,7 +752,8 @@ class Pipeline:
                    "layout, typography, spacing, navigation, and loading, empty, error and success states. "
                    "Explain visual choices and how builders will match the approved prototype. "
                    "For a non-graphical product, explain why a visual prototype is not applicable. "
-                   "This is an early design artifact for the existing CEO requirements approval, not a claim of working functionality.")
+                   "This is an early design artifact for the existing CEO requirements approval, not a claim of working functionality.\n\n"
+                   + VISUAL_DIRECTION)
             if p.get("size") == "small":
                 ask += ("\n\nThis is a small project: keep docs/DESIGN.md to about one page, and do not create "
                         "docs/design/prototype.html. Describe the layout, states and wording in the document instead.")
@@ -814,13 +835,14 @@ class Pipeline:
                "Review existing backlog proposals first; consolidate overlapping work into one authoritative plan. Leave superseded proposals in backlog, not scheduled alongside the plan. Finish by calling submit_plan with the build tasks. Assign each task to one of these roles:\n"
                f"{role_list}\nUse only the roles this product needs. Where the team has them, include tasks for "
                "run/deploy setup, automated tests and user documentation.\n" + CONTRACT_GUIDE)
+        ask += "\n\n" + TICKET_SIZE
         if p.get("size") == "small":
-            ask += ("\n\nThis is a small project: plan as few build tasks as the PRD needs (usually one to three), "
+            ask += ("\n\nThis is a small project: plan as few build tasks as the PRD needs, "
                     "and keep product.json's checks to installation/build, tests and the main user flow. "
                     "Keep the stack as small as the PRD allows: no packages to install, no test framework, no browser "
                     "automation (no Playwright, Cypress or Selenium) and no build step. Use the language's built-in test "
                     "runner (for example `node --test`), put the logic in a plain module the tests can import, and plan "
-                    "one build ticket for the app with its unit tests. Do not plan a separate end-to-end test ticket.")
+                    "each ticket carrying its own unit tests. Do not plan a separate end-to-end test ticket.")
         if p["feedback"]:
             ask += f"\n\nThe CTO sent the previous design back. Address this:\n{p['feedback']}"
         arch_ticket = self._stage_ticket(p["id"], "stage-architecture", f"Architecture and build plan for {p['name']}",
@@ -951,13 +973,16 @@ class Pipeline:
                 qa_ticket = self._stage_ticket(p["id"], "stage-release-qa", f"Release QA for {p['name']}", qa,
                                                "Check the whole product against docs/PRD.md and report in docs/QA_REPORT.md.",
                                                handoff="Engineering (all build tickets done)")
+                shots = self._screenshots(p, ws)
                 integration = self.runtime.run(qa, "All build tasks are complete. Check the product as a whole against docs/PRD.md: "
                                  "install it, run the full test suite and try the main flows. Write what you ran and "
                                  "what you found to docs/QA_REPORT.md, including anything that does not work. "
                                  "If the sole blocker is missing verification access/evidence, set blocker_type to verification and list exact human-assisted steps in notes; do not propose code repairs. "
                                  "Finish by calling submit_review; request_changes if any required flow fails OR any required acceptance check has not been executed. Passing automated commands do not satisfy manual accessibility, visual or other unexecuted requirements. Supply the acceptance array in submit_review with a criterion-by-criterion evidence checklist; do not approve incomplete verification.\n\n"
+                                 + (SCREENSHOT_QA if shots else "") + (SMALL_QA + "\n\n" if self.small(pid) else "")
                                  + evidence(checked),
-                                 ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket})
+                                 ws, project_id=p["id"], meta={"purpose": "integration", "ticket_id": qa_ticket,
+                                                               **({"max_turns": 20} if self.small(pid) else {})})
                 ws.commit(f"Release check ({qa['name']})")
                 if not integration.completed or not integration.review or integration.review["verdict"] != "approve" or not self._read(ws, "docs/QA_REPORT.md"):
                     release_findings.append("Integration QA: " + ((integration.review or {}).get("notes") or "No completed approval verdict."))
@@ -1024,6 +1049,45 @@ class Pipeline:
             self._stage(p["id"], "release_approval")
         finally:
             self.releasing.discard(pid)
+
+    def _screenshots(self, p: dict, ws: Workspace) -> bool:
+        """Screenshots of the page (desktop and phone width) for release QA, taken with Chrome or Edge on this computer.
+        They go in .shots/, which git ignores, so they never change what was verified. False when there is nothing to show."""
+        if not self.s.screenshots:
+            return False
+        import shutil, tempfile
+        page = next((ws.root / n for n in ("index.html", "public/index.html", "dist/index.html", "docs/index.html")
+                     if (ws.root / n).is_file()), None)
+        browser = next((b for b in (shutil.which(n) for n in ("google-chrome", "chromium", "chrome", "msedge", "microsoft-edge")) if b), None) \
+            or next((c for c in ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                                 "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                                 r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe") if Path(c).is_file()), None)
+        if not page or not browser:
+            return False
+        shots = ws.root / ".shots"
+        try:
+            shots.mkdir(exist_ok=True)
+            exclude = ws.root / ".git" / "info" / "exclude"
+            if exclude.parent.is_dir() and ".shots/" not in (exclude.read_text("utf-8", "replace") if exclude.exists() else ""):
+                with exclude.open("a", encoding="utf-8") as f:
+                    f.write("\n.shots/\n")
+            for old in shots.glob("*.png"):          # never leave a picture of an earlier version
+                old.unlink()
+            done = 0
+            for name, size in (("desktop", "1280,800"), ("mobile", "390,800")):
+                with tempfile.TemporaryDirectory(prefix="vittics-shot-") as profile:
+                    subprocess.run([browser, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
+                                    f"--user-data-dir={profile}", f"--window-size={size}", "--virtual-time-budget=3000",
+                                    f"--screenshot={shots / (name + '.png')}", page.as_uri()],
+                                   capture_output=True, timeout=45)
+                done += (shots / f"{name}.png").is_file()
+            if done:
+                self.db.log("work", "Took screenshots of the page for release QA.", p["id"])
+            return done == 2
+        except Exception as exc:                 # no screenshots is not a reason to stop a release
+            self.db.log("warn", f"Screenshots were not taken: {exc}", p["id"])
+            return False
 
     def _audit(self, p: dict, ws: Workspace, checked: dict | None = None, checked_head: str | None = None) -> list[str] | None:
         """Run every staffed auditor role over the finished product. Returns None
@@ -1420,6 +1484,7 @@ class Pipeline:
                    f"Your task [{task['key']}]: {task['title']}\n{task['description']}\n\n"
                    "Done means: the work is in the workspace, tests exist and pass where they apply, "
                    "and nothing that worked before is broken.\n\n" + DOC_RULES
+                   + ("\n\n" + APPLY_DIRECTION if department not in DOCUMENT_DEPARTMENTS else "")
                    + ("\n\n" + SMALL_BUILD if self.small(pid) else ""))
             if task["feedback"]:
                 ask += f"\n\nYour previous attempt was sent back. Fix these findings:\n{task['feedback']}"
