@@ -733,6 +733,9 @@ class Pipeline:
                    "Explain visual choices and how builders will match the approved prototype. "
                    "For a non-graphical product, explain why a visual prototype is not applicable. "
                    "This is an early design artifact for the existing CEO requirements approval, not a claim of working functionality.")
+            if p.get("size") == "small":
+                ask += ("\n\nThis is a small project: keep docs/DESIGN.md to about one page, and do not create "
+                        "docs/design/prototype.html. Describe the layout, states and wording in the document instead.")
             if p["feedback"]:
                 ask += f"\n\nThe CEO sent the previous version back. Address this where it concerns the design:\n{p['feedback']}"
             self.db.log("work", f"{designer['name']} is designing the user experience.", p["id"], actor=designer["name"])
@@ -813,7 +816,11 @@ class Pipeline:
                "run/deploy setup, automated tests and user documentation.\n" + CONTRACT_GUIDE)
         if p.get("size") == "small":
             ask += ("\n\nThis is a small project: plan as few build tasks as the PRD needs (usually one to three), "
-                    "and keep product.json's checks to installation/build, tests and the main user flow.")
+                    "and keep product.json's checks to installation/build, tests and the main user flow. "
+                    "Keep the stack as small as the PRD allows: no packages to install, no test framework, no browser "
+                    "automation (no Playwright, Cypress or Selenium) and no build step. Use the language's built-in test "
+                    "runner (for example `node --test`), put the logic in a plain module the tests can import, and plan "
+                    "one build ticket for the app with its unit tests. Do not plan a separate end-to-end test ticket.")
         if p["feedback"]:
             ask += f"\n\nThe CTO sent the previous design back. Address this:\n{p['feedback']}"
         arch_ticket = self._stage_ticket(p["id"], "stage-architecture", f"Architecture and build plan for {p['name']}",
@@ -1469,7 +1476,7 @@ class Pipeline:
                 "assignment": {k: task[k] for k in ("title", "description", "role", "feedback")}}), task["id"])
             self.db.run("UPDATE tasks SET status='in_review', updated_at=? WHERE id=?", now(), task["id"])
             note(self.db, task["id"], agent["name"], "Submitted for review.\n" + (res.text or "")[:1500])
-            findings, approved, scores = [], res.completed, []
+            findings, approved, scores, person_only = [], res.completed, [], []
             if not res.completed:
                 findings.append("Builder did not finish within its turn budget.")
             diff_text = self._review_diff(ws, review_base)
@@ -1518,7 +1525,11 @@ class Pipeline:
                                                   unverifiable=rv.get("blocker_type") == "verification")
                 self.perf.record(agent["id"], rv["score"], source=source, reviewer=checker["name"], notes=rv["notes"],
                                  task_id=task["id"], project_id=pid)
-                if rv["verdict"] != "approve":
+                if rv["verdict"] != "approve" and rv.get("blocker_type") == "verification":
+                    # Nothing for the builder to fix: only a person can supply this evidence. Rework would just spend
+                    # tokens, so the ticket passes and the gap is carried to the release check, where the CTO can accept it.
+                    person_only.append(f"{checker['name']} ({check_role['title']}): {rv['notes']}")
+                elif rv["verdict"] != "approve":
                     approved = False
                     findings.append(f"{checker['name']} ({check_role['title']}, {rv['score']:.0f}/100): {rv['notes']}")
             self.perf.evaluate(agent["id"])
@@ -1536,7 +1547,9 @@ class Pipeline:
                 self.db.run("UPDATE tasks SET status='done', result=?, updated_at=? WHERE id=?",
                             res.text, now(), task["id"])
                 self.db.log("work", f"[{task['key']}] passed review.", pid, actor=agent["name"])
-                note(self.db, task["id"], agent["name"], "Passed review. Done.")
+                note(self.db, task["id"], agent["name"], "Passed review. Done."
+                     + ("\n\nNot checked by a person (no rework asked; carried to the release check):\n" + "\n".join(person_only)
+                        if person_only else ""))
                 return True
             attempts = task["attempts"] + 1
             failed = attempts > self.max_rework(pid)

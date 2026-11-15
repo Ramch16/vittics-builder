@@ -111,3 +111,39 @@ def test_a_small_builder_is_told_to_work_economically(tmp_path, monkeypatch):
     builders = {size: [a for s, a in asks if s == size and "Your task [" in a] for size in ("small", "standard")}
     assert builders["small"] and all(SMALL_BUILD in a for a in builders["small"])
     assert builders["standard"] and not any(SMALL_BUILD in a for a in builders["standard"])
+
+
+def test_a_ticket_blocked_only_by_checks_a_person_must_do_passes_without_rework(co, monkeypatch):
+    from vittics_builder.agent import RunResult
+    p = co.pipeline.create_project("Product", "Build a library", size="small")
+    task = co.tickets.create(p["id"], "Core", "Build core", "Lucky", status="todo", role="backend_engineer")
+    original, reviews = co.runtime.run, []
+
+    def run(agent, instructions, workspace, **kw):
+        if (kw.get("meta") or {}).get("author"):
+            reviews.append(1)
+            return RunResult(completed=True, review={"score": 88, "verdict": "request_changes", "blocker_type": "verification",
+                "notes": "Open the app in a browser and click through the flows.",
+                "acceptance": [{"criterion": "Manual click-through", "status": "unverified", "evidence": "No browser"}]})
+        return original(agent, instructions, workspace, **kw)
+    monkeypatch.setattr(co.runtime, "run", run)
+    assert co.pipeline._run_task(p, task, co.pipeline.workspace(p))
+    row = co.db.one("SELECT status, attempts FROM tasks WHERE id=?", task["id"])
+    assert (row["status"], row["attempts"]) == ("done", 0) and reviews          # no send-back, no second build
+    assert co.db.one("SELECT 1 FROM ticket_comments WHERE task_id=? AND body LIKE '%Not checked by a person%'", task["id"])
+
+
+def test_a_ticket_with_a_real_defect_is_still_sent_back(co, monkeypatch):
+    from vittics_builder.agent import RunResult
+    p = co.pipeline.create_project("Product", "Build a library", size="small")
+    task = co.tickets.create(p["id"], "Core", "Build core", "Lucky", status="todo", role="backend_engineer")
+    original = co.runtime.run
+
+    def run(agent, instructions, workspace, **kw):
+        if (kw.get("meta") or {}).get("author"):
+            return RunResult(completed=True, review={"score": 40, "verdict": "request_changes", "blocker_type": "defect",
+                "notes": "Delete does nothing."})
+        return original(agent, instructions, workspace, **kw)
+    monkeypatch.setattr(co.runtime, "run", run)
+    co.pipeline._run_task(p, task, co.pipeline.workspace(p))
+    assert co.db.one("SELECT attempts FROM tasks WHERE id=?", task["id"])["attempts"] >= 1

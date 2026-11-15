@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.27.3 — 2026-11-15
+A one-page checklist rebuilt on 0.27.2 still used 14.8M input tokens. The architecture said "plain HTML, no framework"
+and then added Vitest, Playwright and a Node server (a 2,297-line lockfile); the e2e ticket alone took about 3.4M, and a
+ticket was sent back twice only because nobody had clicked through the app in a browser.
+- **Small projects get a minimal stack:** no packages to install, no test framework, no browser automation, no build
+  step; the built-in test runner (for example `node --test`), one build ticket, and no separate end-to-end ticket.
+- **Small projects skip the design prototype** and keep the design to about one page.
+- **A ticket blocked only by checks a person has to do now passes** with a note carried to the release check, instead of
+  being sent back for rework that cannot help. Real defects are still sent back.
+
+Not done: agents still start from scratch on every run (no session resume), and the saving is not yet measured.
+
 ## 0.27.2 — 2026-11-14
 From the checklist pilot finished on 0.27.1 (18.8M input tokens: builders 60%, QA and reviews 25%; two reviewers put on
 probation for blocking on checks only a person could do):
