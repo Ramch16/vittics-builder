@@ -835,14 +835,16 @@ class Pipeline:
                "Review existing backlog proposals first; consolidate overlapping work into one authoritative plan. Leave superseded proposals in backlog, not scheduled alongside the plan. Finish by calling submit_plan with the build tasks. Assign each task to one of these roles:\n"
                f"{role_list}\nUse only the roles this product needs. Where the team has them, include tasks for "
                "run/deploy setup, automated tests and user documentation.\n" + CONTRACT_GUIDE)
-        ask += "\n\n" + TICKET_SIZE
+        if p.get("size") != "small":
+            ask += "\n\n" + TICKET_SIZE
         if p.get("size") == "small":
-            ask += ("\n\nThis is a small project: plan as few build tasks as the PRD needs, "
+            ask += ("\n\nThis is a small project: plan as few build tasks as the PRD needs (usually one), "
                     "and keep product.json's checks to installation/build, tests and the main user flow. "
                     "Keep the stack as small as the PRD allows: no packages to install, no test framework, no browser "
                     "automation (no Playwright, Cypress or Selenium) and no build step. Use the language's built-in test "
                     "runner (for example `node --test`), put the logic in a plain module the tests can import, and plan "
-                    "each ticket carrying its own unit tests. Do not plan a separate end-to-end test ticket.")
+                    "one build ticket for the app with its unit tests (several tickets cost more: each one re-reads the documents "
+                    "and the earlier code). Do not plan a separate end-to-end test ticket.")
         if p["feedback"]:
             ask += f"\n\nThe CTO sent the previous design back. Address this:\n{p['feedback']}"
         arch_ticket = self._stage_ticket(p["id"], "stage-architecture", f"Architecture and build plan for {p['name']}",
@@ -1075,11 +1077,16 @@ class Pipeline:
             for old in shots.glob("*.png"):          # never leave a picture of an earlier version
                 old.unlink()
             done = 0
-            for name, size in (("desktop", "1280,800"), ("mobile", "390,800")):
+            # Chrome will not open a window narrower than about 500px, so the phone view is the page in a 390px frame
+            # (its media queries answer to the frame's width).
+            frame = shots / "phone.html"
+            frame.write_text('<!doctype html><body style="margin:0;background:#888"><iframe src="' + page.as_uri() +
+                             '" style="width:390px;height:800px;border:0;background:#fff"></iframe>', encoding="utf-8")
+            for name, size, target in (("desktop", "1280,800", page), ("mobile", "390,800", frame)):
                 with tempfile.TemporaryDirectory(prefix="vittics-shot-") as profile:
                     subprocess.run([browser, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
                                     f"--user-data-dir={profile}", f"--window-size={size}", "--virtual-time-budget=3000",
-                                    f"--screenshot={shots / (name + '.png')}", page.as_uri()],
+                                    f"--screenshot={shots / (name + '.png')}", target.as_uri()],
                                    capture_output=True, timeout=45)
                 done += (shots / f"{name}.png").is_file()
             if done:

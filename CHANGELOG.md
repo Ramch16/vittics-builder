@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.28.2 — 2026-11-15
+Rebuilding the notes app on 0.28.1 cost 15.74M input tokens (9.47M on 0.28.0). Three tickets cost more than one: each
+builder re-reads the PRD, design and the earlier code, and each ticket is reviewed. About 5.7M of the total came from a
+restart in the middle of release QA, which left the project idle until it was run again by hand.
+- **A small project builds one ticket again.** The ticket-sizing rule now applies to Standard projects only.
+- **Work a restart cut off goes on by itself.** When the app starts, a project that was working (and is not paused,
+  parked, dropped or finished) carries on. Anything waiting for a decision still waits.
+- **The phone screenshot is a real phone width.** Chrome will not open a window narrower than about 500px, so the
+  page was cropped and looked clipped. It is now shown in a 390px frame, so its phone layout applies.
+- The visual direction stays for every size.
+
+Not measured yet: the token cost of the notes app on 0.28.2 (expect about the 0.28.0 figure plus the design), and what
+caused the app to restart at 22:50 during the 0.28.1 run (the screenshot step ran just before; nothing shows it was the cause).
+
 ## 0.28.1 — 2026-11-15
 A notes app (eight features) on 0.28.0 cost 9.47M input tokens, because the planner put the whole app in one ticket
 and one builder session re-read its growing conversation on every step. Its design was also generic: the one-page
